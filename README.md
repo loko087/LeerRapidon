@@ -38,3 +38,6 @@ no network permission is requested.
   to visual-only automatically.
 - No cloud sync — everything lives in the app's private storage on-device.
 
+## AI  USAGE 
+
+I am using Claude Code to help me make decisions on architecture, review code and debug errors. 
