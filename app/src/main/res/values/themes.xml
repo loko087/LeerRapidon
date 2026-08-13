@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.RapidReader" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#FF0F1216</item>
+        <item name="android:windowBackground">#FF0F1216</item>
+        <item name="android:navigationBarColor">#FF0F1216</item>
+    </style>
+</resources>
