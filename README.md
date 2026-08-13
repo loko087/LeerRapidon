@@ -4,21 +4,6 @@ RSVP speed-reading app with a book library, PDF/EPUB import, and native
 text-to-speech, built with Kotlin + Jetpack Compose. Fully offline —
 no network permission is requested.
 
-## Opening the project
-
-This was written outside Android Studio, so it has no Gradle wrapper jar
-(a binary file) checked in. To open it:
-
-1. In Android Studio: **File → Open** and select the `RapidReader` folder.
-2. Android Studio will detect the missing wrapper and offer to generate
-   it automatically — accept that, or run `gradle wrapper` yourself if
-   you have Gradle installed locally.
-3. Let Gradle sync. First sync will download AndroxdX/Compose/Room/
-   PdfBox-Android dependencies from Google's and Maven Central's
-   repositories.
-4. Run on a device or emulator running **API 26 (Android 8.0) or higher**
-   (minSdk 26 — required for TextToSpeech's word-boundary callback).
-
 ## What's implemented
 
 - **Library** (`LibraryScreen.kt`) — Room-backed list of books with
@@ -53,10 +38,3 @@ This was written outside Android Studio, so it has no Gradle wrapper jar
   to visual-only automatically.
 - No cloud sync — everything lives in the app's private storage on-device.
 
-## Suggested next steps
-
-- App icon / launcher graphics (currently uses the system default).
-- Swap Room's plain-text file storage for compressed storage if you plan
-  to import very large PDFs.
-- A "continue reading" quick-launch card at the top of the library for
-  the most recently opened book.
