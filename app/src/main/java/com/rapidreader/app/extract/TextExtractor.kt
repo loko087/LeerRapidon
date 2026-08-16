@@ -14,10 +14,8 @@ import com.tom_roush.pdfbox.rendering.PDFRenderer
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.w3c.dom.Document
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
-import javax.xml.parsers.DocumentBuilderFactory
 
 data class ExtractResult(val text: String, val title: String, val source: String)
 
@@ -155,58 +153,16 @@ object TextExtractor {
             }
         } ?: throw IllegalStateException("Couldn't open file")
 
-        val containerBytes = entries["META-INF/container.xml"]
-            ?: throw IllegalStateException("Not a valid EPUB (missing container.xml)")
-        val containerDoc = parseXml(containerBytes)
-        val opfPath = containerDoc.getElementsByTagName("rootfile").item(0)
-            .attributes.getNamedItem("full-path").nodeValue
-        val opfDir = if (opfPath.contains("/")) opfPath.substringBeforeLast("/") else ""
-
-        val opfBytes = entries[opfPath] ?: throw IllegalStateException("Could not find EPUB manifest")
-        val opfDoc = parseXml(opfBytes)
-
-        val manifest = mutableMapOf<String, String>()
-        val items = opfDoc.getElementsByTagName("item")
-        for (i in 0 until items.length) {
-            val el = items.item(i)
-            val id = el.attributes.getNamedItem("id")?.nodeValue
-            val href = el.attributes.getNamedItem("href")?.nodeValue
-            if (id != null && href != null) manifest[id] = href
-        }
-
-        var title = baseTitle(fileName)
-        val dcTitles = opfDoc.getElementsByTagName("dc:title")
-        val titleNodes = if (dcTitles.length > 0) dcTitles else opfDoc.getElementsByTagName("title")
-        if (titleNodes.length > 0) {
-            val t = titleNodes.item(0).textContent?.trim()
-            if (!t.isNullOrEmpty()) title = t
-        }
-
-        val spineIds = mutableListOf<String>()
-        val itemrefs = opfDoc.getElementsByTagName("itemref")
-        for (i in 0 until itemrefs.length) {
-            val idref = itemrefs.item(i).attributes.getNamedItem("idref")?.nodeValue
-            if (idref != null) spineIds.add(idref)
-        }
+        val structure = EpubParser.parse { path -> entries[path] }
 
         val sb = StringBuilder()
-        for (id in spineIds) {
-            val href = manifest[id] ?: continue
-            val decodedHref = Uri.decode(href)
-            val path = if (opfDir.isNotEmpty()) "$opfDir/$decodedHref" else decodedHref
+        for (path in structure.spinePaths) {
             val bytes = entries[path] ?: continue
             sb.append(htmlToText(String(bytes, Charsets.UTF_8))).append("\n\n")
         }
         val text = sb.toString()
         if (text.isBlank()) throw IllegalStateException("No readable text found in this EPUB")
-        return ExtractResult(text, title, "epub")
-    }
-
-    private fun parseXml(bytes: ByteArray): Document {
-        val factory = DocumentBuilderFactory.newInstance()
-        factory.isNamespaceAware = false
-        val builder = factory.newDocumentBuilder()
-        return builder.parse(bytes.inputStream())
+        return ExtractResult(text, structure.title ?: baseTitle(fileName), "epub")
     }
 
     // Regex-based tag stripping tolerates the imperfect/near-XHTML markup real

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rapidreader.app.data.OriginalKind
 import com.rapidreader.app.rsvp.RsvpEngine
 import com.rapidreader.app.theme.DimColor
 import com.rapidreader.app.theme.LineColor
@@ -49,6 +50,7 @@ import com.rapidreader.app.ui.viewmodel.ReaderViewModel
 fun ReaderScreen(
     bookId: String,
     onBack: () -> Unit,
+    onOpenOriginal: (OriginalKind) -> Unit,
     vm: ReaderViewModel = viewModel()
 ) {
     LaunchedEffect(bookId) { vm.load(bookId) }
@@ -76,6 +78,9 @@ fun ReaderScreen(
         ) {
             TextButton(onClick = onBack) { Text("\u2190 Library", color = DimColor) }
             Text("${ui.idx + 1} / ${ui.words.size} \u00b7 ~$minutesLeft min left", color = DimColor, fontSize = 13.sp)
+            ui.originalKind?.let { kind ->
+                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+            }
         }
         Spacer(Modifier.height(16.dp))
 

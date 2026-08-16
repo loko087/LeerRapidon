@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rapidreader.app.data.BookEntity
+import com.rapidreader.app.data.OriginalKind
+import com.rapidreader.app.data.originalKind
 import com.rapidreader.app.theme.BgColor
 import com.rapidreader.app.theme.DimColor
 import com.rapidreader.app.theme.LineColor
@@ -44,6 +46,7 @@ import java.util.concurrent.TimeUnit
 @Composable
 fun LibraryScreen(
     onOpenBook: (String) -> Unit,
+    onOpenOriginal: (String, OriginalKind) -> Unit,
     onAddBook: () -> Unit,
     vm: LibraryViewModel = viewModel()
 ) {
@@ -65,7 +68,12 @@ fun LibraryScreen(
         } else {
             LazyColumn(Modifier.weight(1f)) {
                 items(books, key = { it.id }) { book ->
-                    BookCard(book, onClick = { onOpenBook(book.id) }, onDelete = { vm.delete(book.id) })
+                    BookCard(
+                        book,
+                        onClick = { onOpenBook(book.id) },
+                        onOpenOriginal = { kind -> onOpenOriginal(book.id, kind) },
+                        onDelete = { vm.delete(book.id) }
+                    )
                     Spacer(Modifier.height(12.dp))
                 }
             }
@@ -79,7 +87,12 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun BookCard(book: BookEntity, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun BookCard(
+    book: BookEntity,
+    onClick: () -> Unit,
+    onOpenOriginal: (OriginalKind) -> Unit,
+    onDelete: () -> Unit
+) {
     val pct = if (book.wordCount > 1) (book.idx * 100 / (book.wordCount - 1)).coerceIn(0, 100) else 0
     Column(
         Modifier
@@ -109,7 +122,12 @@ private fun BookCard(book: BookEntity, onClick: () -> Unit, onDelete: () -> Unit
                 Spacer(Modifier.height(4.dp))
                 Text("$pct% \u00b7 ${relTime(book.updatedAt)}", color = DimColor, fontSize = 12.sp)
             }
-            TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                book.originalKind()?.let { kind ->
+                    TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+                }
+                TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
+            }
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(LineColor)) {
