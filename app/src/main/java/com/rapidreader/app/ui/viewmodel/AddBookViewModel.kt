@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 
 sealed class AddState {
     data object Idle : AddState()
-    data class Parsing(val fileName: String) : AddState()
+    data class Parsing(val fileName: String, val detail: String? = null) : AddState()
     data class Error(val message: String) : AddState()
     data class Ready(val text: String, val title: String, val source: String, val wordCount: Int) : AddState()
 }
@@ -29,7 +29,9 @@ class AddBookViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = AddState.Parsing(fileName)
         viewModelScope.launch {
             try {
-                val result = TextExtractor.extract(getApplication(), uri, fileName)
+                val result = TextExtractor.extract(getApplication(), uri, fileName) { detail ->
+                    _state.value = AddState.Parsing(fileName, detail)
+                }
                 val words = RsvpEngine.tokenize(result.text)
                 if (words.isEmpty()) throw IllegalStateException("No text could be extracted from this file.")
                 _state.value = AddState.Ready(result.text, result.title, result.source, words.size)

@@ -90,7 +90,8 @@ fun AddBookScreen(
                     }) { Text("Choose file") }
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "PDF, EPUB, or plain text. Scanned PDFs without a text layer won't extract.",
+                        "PDF, EPUB, or plain text. Scanned PDFs are read with on-device OCR " +
+                                "(slower, and less accurate than a real text layer).",
                         color = DimColor, fontSize = 12.sp
                     )
                 }
@@ -105,7 +106,7 @@ fun AddBookScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(color = PivotColor, modifier = Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Reading \"${s.fileName}\"\u2026", color = TextColor)
+                        Text(s.detail ?: "Reading \"${s.fileName}\"\u2026", color = TextColor)
                     }
                 }
             }
