@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "com.rapidreader.app"
     compileSdk = 34
+    buildToolsVersion = "35.0.1"
 
     defaultConfig {
         applicationId = "com.rapidreader.app"

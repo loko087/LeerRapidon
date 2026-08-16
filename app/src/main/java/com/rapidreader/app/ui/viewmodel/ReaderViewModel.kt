@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.rapidreader.app.data.BookRepository
+import com.rapidreader.app.data.OriginalKind
+import com.rapidreader.app.data.originalKind
 import com.rapidreader.app.rsvp.RsvpEngine
 import com.rapidreader.app.tts.SpeechController
 import kotlinx.coroutines.Job
@@ -21,7 +23,8 @@ data class ReaderUiState(
     val playing: Boolean = false,
     val audioMode: Boolean = false,
     val ttsOk: Boolean = true,
-    val loading: Boolean = true
+    val loading: Boolean = true,
+    val originalKind: OriginalKind? = null
 )
 
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
@@ -52,7 +55,8 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
                 words = words,
                 idx = entry.idx.coerceIn(0, (words.size - 1).coerceAtLeast(0)),
                 wpm = entry.wpm,
-                loading = false
+                loading = false,
+                originalKind = entry.originalKind()
             )
         }
     }

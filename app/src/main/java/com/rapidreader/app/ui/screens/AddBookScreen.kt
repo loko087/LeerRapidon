@@ -129,6 +129,10 @@ fun AddBookScreen(
                     OutlinedTextField(value = title, onValueChange = { title = it }, modifier = Modifier.fillMaxWidth())
                     Spacer(Modifier.height(8.dp))
                     Text("${s.wordCount} words extracted (${s.source})", color = DimColor, fontSize = 12.sp)
+                    s.originalNote?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text(it, color = DimColor, fontSize = 12.sp)
+                    }
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { scope.launch { onSaved(vm.save(title)) } },
