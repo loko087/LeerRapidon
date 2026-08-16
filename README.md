@@ -11,7 +11,10 @@ no network permission is requested.
 - **Add a book** (`AddBookScreen.kt`) — file picker (PDF / EPUB / TXT)
   or paste text directly.
 - **Extraction** (`extract/TextExtractor.kt`):
-  - PDF via PdfBox-Android's `PDFTextStripper`.
+  - PDF via PdfBox-Android's `PDFTextStripper`. If the PDF has no text
+    layer (a scanned/image-only page), it falls back to rendering each
+    page and running ML Kit's bundled, on-device Text Recognition over it
+    — no network call, so the app stays fully offline.
   - EPUB via a manual ZIP walk + `container.xml`/OPF parsing to read the
     spine in order, with a tolerant HTML-to-text pass per chapter file
     (real-world EPUB markup is often not strictly valid XML, so this
@@ -31,8 +34,11 @@ no network permission is requested.
 
 ## Known limitations
 
-- **Scanned PDFs** with no embedded text layer won't extract anything —
-  PdfBox reads existing text, it doesn't OCR images.
+- **Scanned PDFs** are read via on-device OCR when there's no embedded
+  text layer, which is slower and less accurate than a real text layer —
+  expect more misreads (especially for low-resolution scans, unusual
+  fonts, or non-Latin scripts, since the bundled model targets Latin
+  script).
 - **TTS voice availability** depends on what's installed on the device;
   if none is available for the detected language, audio mode falls back
   to visual-only automatically.

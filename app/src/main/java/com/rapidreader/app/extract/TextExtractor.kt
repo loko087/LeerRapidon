@@ -3,8 +3,14 @@ package com.rapidreader.app.extract
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizerOptions
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.io.MemoryUsageSetting
 import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.rendering.PDFRenderer
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -17,12 +23,19 @@ data class ExtractResult(val text: String, val title: String, val source: String
 
 object TextExtractor {
 
-    suspend fun extract(context: Context, uri: Uri, fileNameHint: String?): ExtractResult =
+    @Volatile private var pdfBoxInitialized = false
+
+    suspend fun extract(
+        context: Context,
+        uri: Uri,
+        fileNameHint: String?,
+        onProgress: (String) -> Unit = {}
+    ): ExtractResult =
         withContext(Dispatchers.IO) {
             val fileName = fileNameHint ?: resolveDisplayName(context, uri) ?: "file"
             val ext = fileName.substringAfterLast('.', "").lowercase()
             when (ext) {
-                "pdf" -> extractPdf(context, uri, fileName)
+                "pdf" -> extractPdf(context, uri, fileName, onProgress)
                 "epub" -> extractEpub(context, uri, fileName)
                 else -> extractTxt(context, uri, fileName)
             }
@@ -44,7 +57,12 @@ object TextExtractor {
         return ExtractResult(text, baseTitle(fileName), "txt")
     }
 
-    private fun extractPdf(context: Context, uri: Uri, fileName: String): ExtractResult {
+    private fun extractPdf(
+        context: Context,
+        uri: Uri,
+        fileName: String,
+        onProgress: (String) -> Unit
+    ): ExtractResult {
         val sizeBytes = queryFileSize(context, uri)
         val maxBytes = 250L * 1024 * 1024 // confirmed: 171MB uncompressed-image PDF OOMs a 192MB heap
 
@@ -59,9 +77,13 @@ object TextExtractor {
             ?: throw IllegalStateException("Couldn't open file")
         val memSetting = MemoryUsageSetting.setupTempFileOnly().setTempDir(context.cacheDir)
 
-        val text = try {
+        val (text, usedOcr) = try {
             input.use { stream ->
-                PDDocument.load(stream, memSetting).use { doc -> PDFTextStripper().getText(doc) }
+                PDDocument.load(stream, memSetting).use { doc ->
+                    val layerText = PDFTextStripper().getText(doc)
+                    if (layerText.isNotBlank()) layerText to false
+                    else ocrPdf(context, doc, onProgress) to true
+                }
             }
         } catch (oom: OutOfMemoryError) {
             throw IllegalStateException("This PDF is too large to process on this device.")
@@ -69,10 +91,42 @@ object TextExtractor {
 
         if (text.isBlank()) {
             throw IllegalStateException(
-                "No extractable text — this PDF may be a scanned image without a text layer"
+                "No text found — this looks like a blank or too low-quality scan for OCR to read"
             )
         }
-        return ExtractResult(text, baseTitle(fileName), "pdf")
+        return ExtractResult(text, baseTitle(fileName), if (usedOcr) "pdf-ocr" else "pdf")
+    }
+
+    // No text layer — fall back to on-device OCR, rendering each page to a
+    // bitmap and running ML Kit's bundled (offline) text recognizer over it.
+    private fun ocrPdf(context: Context, doc: PDDocument, onProgress: (String) -> Unit): String {
+        if (!pdfBoxInitialized) {
+            synchronized(this) {
+                if (!pdfBoxInitialized) {
+                    PDFBoxResourceLoader.init(context.applicationContext)
+                    pdfBoxInitialized = true
+                }
+            }
+        }
+        val renderer = PDFRenderer(doc)
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        try {
+            val sb = StringBuilder()
+            val pageCount = doc.numberOfPages
+            for (page in 0 until pageCount) {
+                onProgress("Scanning page ${page + 1} of $pageCount…")
+                val bitmap = renderer.renderImageWithDPI(page, 200f)
+                try {
+                    val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
+                    sb.append(result.text).append("\n\n")
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+            return sb.toString()
+        } finally {
+            recognizer.close()
+        }
     }
 
     private fun queryFileSize(context: Context, uri: Uri): Long? {

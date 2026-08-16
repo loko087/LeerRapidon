@@ -59,4 +59,8 @@ dependencies {
 
     // PDF text extraction (pure-Kotlin/Java port of Apache PDFBox for Android)
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
+    // OCR fallback for scanned PDFs with no text layer. Bundled (not Play
+    // Services-downloaded) model, so it works fully offline like the rest of the app.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
