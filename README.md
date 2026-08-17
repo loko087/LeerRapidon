@@ -22,7 +22,18 @@ no network permission is requested.
   - Plain text read directly.
 - **Fast reader** (`ReaderScreen.kt` + `ReaderViewModel.kt`) — RSVP display
   with the ORP (optimal recognition point) letter highlighted, a speed
-  slider, scrubber, and audio mode.
+  slider, scrubber, and audio mode. A "words per frame" slider (1–5)
+  controls how many words flash together per frame — the pivot highlight
+  stays on the word actually being read (the middle word in visual mode,
+  whichever word is being spoken in audio mode).
+- **Browse full text** (`BrowseTextScreen.kt` + `BrowseTextViewModel.kt`)
+  — shows the whole book as flowing paragraph text instead of one
+  word/frame at a time, reached via a "Browse" button in the fast reader.
+  The current reading position is highlighted and auto-scrolled to on
+  open; tapping any word jumps the fast reader there. Paragraphs are
+  built by `RsvpEngine.paragraphs()` from the same word sequence the fast
+  reader tokenizes, so a tapped word's index always lines up with the
+  RSVP reader's position.
 - **Original-form reader** — a second reading mode that shows a PDF or
   EPUB as it actually looks, reachable via an "Original" button on a
   book's library card or from inside the fast reader (only shown for
@@ -36,10 +47,15 @@ no network permission is requested.
     pinch-zoom and Prev/Next chapter buttons. "Pages" are chapters, not
     fixed print-style pagination. JavaScript is deliberately disabled —
     EPUB content is untrusted, user-supplied HTML.
-- **Audio mode** (`tts/SpeechController.kt`) — wraps Android's native
-  `TextToSpeech` and uses `onRangeStart` (API 26+) for genuine
-  word-boundary sync, so the display advances with the voice rather than
-  a fallback timer. Fast-reader only, for now.
+- **Audio mode** (`tts/SpeechController.kt` + `ReaderViewModel.speakFromIdx`)
+  — wraps Android's native `TextToSpeech` and uses `onRangeStart` (API
+  26+) for genuine word-boundary sync, so the display advances with the
+  voice rather than a fallback timer. Speaks the whole remaining book as
+  one continuous utterance (not one utterance per frame — that was tried
+  and reverted, since per-utterance engine startup latency made the
+  Speed slider feel unresponsive) and respects the same "words per
+  frame" setting as visual mode, with the pivot tracking the exact word
+  being spoken. Fast-reader only, for now.
 - **Persistence** — `BookRepository` stores each book's extracted text as
   a file under internal storage and keeps title/progress/speed in a Room
   database. Reading position is saved every ~15 words and on
@@ -61,6 +77,11 @@ no network permission is requested.
 - **TTS voice availability** depends on what's installed on the device;
   if none is available for the detected language, audio mode falls back
   to visual-only automatically.
+- **Audio mode speed caps out around 560 wpm** — `SpeechController`
+  clamps the TTS engine's rate at 3x, since most engines get unreliable
+  or unintelligible much past that. The Speed slider still goes to 900
+  wpm (visual mode has no such ceiling), with a UI note explaining the
+  cap once you're past it in audio mode.
 - **Storage cost**: preserving the original PDF/EPUB alongside the
   extracted text means imports now use roughly double the space of the
   source file. There's a free-space guard at import time, but no UI yet

@@ -4,19 +4,24 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
-## Where things stand (2026-08-16)
+## Where things stand (2026-08-17)
+
+All of the below is **merged into `main`** as of this writing (PRs #1–#5)
+— this file previously carried "not yet committed" caveats for a couple
+of these that no longer apply; if you're reading this from a stale copy,
+trust `git log origin/main` over this paragraph.
 
 - **Fast reading (RSVP)** and **original-form reading** (real PDF pages /
   EPUB chapters) both work. Original-form reading shipped in
-  [PR #2](https://github.com/loko087/LeerRapidon/pull/2) — **merged**.
+  [PR #2](https://github.com/loko087/LeerRapidon/pull/2).
 - Books only get the "Original" button if they were imported after that
   PR landed; older books don't have a preserved original file to show.
 - **Words-per-frame RSVP mode** shipped in
-  [PR #3](https://github.com/loko087/LeerRapidon/pull/3) — **merged**. A
-  1-5 slider next to Speed controls how many words flash together per
-  frame; Audio mode respects the same frame size and highlights whichever
-  word is actively being spoken. Global, session-only setting (like Audio
-  mode), not persisted per-book.
+  [PR #3](https://github.com/loko087/LeerRapidon/pull/3). A 1-5 slider
+  next to Speed controls how many words flash together per frame; Audio
+  mode respects the same frame size and highlights whichever word is
+  actively being spoken. Global, session-only setting (like Audio mode),
+  not persisted per-book.
   - Audio mode speaks the whole remaining book as one continuous TTS
     utterance (`ReaderViewModel.speakFromIdx`) — a per-frame-utterance
     version was tried first and reverted because engine startup latency
@@ -25,19 +30,40 @@ that should survive a machine switch belongs here instead.
     Audio mode stops getting faster above ~540-560 wpm — there's a UI
     note for this now, left in place at the user's request rather than
     raised or removed.
-- **Browse full text** built (`BrowseTextScreen.kt` / `BrowseTextViewModel.kt`,
-  `RsvpEngine.paragraphs()`) — **not yet committed/pushed**, check
-  `git status` before assuming this landed. Shows the whole book as
-  flowing paragraph text (reached via a new "Browse" button next to
-  "Original" in the reader), current word highlighted, tap any word to
-  jump the RSVP reader there. `RsvpEngine.paragraphs()` groups the same
-  words `tokenize()` produces (capped at 120 words/paragraph so a
-  no-blank-lines source can't produce one giant unvirtualized
-  `LazyColumn` item) — word order/count is provably identical to
-  `tokenize()`, so a paragraph word's index is a valid RSVP word index.
-  Picking a word persists it via `BookRepository.updateProgress` then
-  forces a fresh reader instance (same `navigateMode` mechanism as mode
-  switches) to pick it up.
+- **Browse full text** shipped in
+  [PR #4](https://github.com/loko087/LeerRapidon/pull/4)
+  (`BrowseTextScreen.kt` / `BrowseTextViewModel.kt`,
+  `RsvpEngine.paragraphs()`). Shows the whole book as flowing paragraph
+  text (reached via a "Browse" button next to "Original" in the reader),
+  current word highlighted, tap any word to jump the RSVP reader there.
+  `RsvpEngine.paragraphs()` groups the same words `tokenize()` produces
+  (capped at 120 words/paragraph so a no-blank-lines source can't produce
+  one giant unvirtualized `LazyColumn` item) — word order/count is
+  provably identical to `tokenize()`, so a paragraph word's index is a
+  valid RSVP word index. Picking a word persists it via
+  `BookRepository.updateProgress` then forces a fresh reader instance
+  (same `navigateMode` mechanism as mode switches) to pick it up.
+- **Narrow/short-screen layout fixes** shipped in
+  [PR #5](https://github.com/loko087/LeerRapidon/pull/5), found by
+  testing on a real phone (a Galaxy Z Flip5, 360dp portrait width) rather
+  than only the wider dev emulator:
+  - `LibraryScreen`'s book title had no width limit and could push the
+    delete button (and "Original") off the edge of the card on a long
+    title — title now wraps/ellipsizes within `weight(1f)`, actions stay
+    on a fixed-size trailing row.
+  - `ReaderScreen` was a non-scrolling `Column`; in landscape there
+    wasn't enough height left for the Speed/Words-per-frame/Audio mode
+    panel and no way to reach it. Now wrapped in `verticalScroll`.
+  - An unusually long single word (no spaces) wrapped across two lines
+    inside the fixed-width pivot-letter columns and overlapped. Those
+    `Text`s are now `softWrap = false` with clipping — degrades to one
+    clipped line instead of garbling.
+  - **Takeaway for future UI work**: the dev emulator used through most
+    of this project is noticeably wider (~448dp) than a typical/compact
+    phone (~360dp). Layout changes that look fine there aren't proof
+    against overflow on a real device — worth spot-checking a narrow
+    width (`adb shell wm size <w>x<h>`) and both orientations before
+    calling a screen change done.
 
 ## Next planned feature: font type & size, for both reading modes
 
