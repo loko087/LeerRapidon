@@ -7,6 +7,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.rapidreader.app.data.OriginalKind
 import com.rapidreader.app.ui.screens.AddBookScreen
+import com.rapidreader.app.ui.screens.BrowseTextScreen
 import com.rapidreader.app.ui.screens.EpubViewerScreen
 import com.rapidreader.app.ui.screens.LibraryScreen
 import com.rapidreader.app.ui.screens.PdfViewerScreen
@@ -44,7 +45,19 @@ fun AppNavHost() {
             ReaderScreen(
                 bookId = bookId,
                 onBack = { nav.popBackStack() },
-                onOpenOriginal = { kind -> nav.navigateMode(originalRoute(bookId, kind)) }
+                onOpenOriginal = { kind -> nav.navigateMode(originalRoute(bookId, kind)) },
+                onBrowseText = { nav.navigate("browse/$bookId") }
+            )
+        }
+        composable("browse/{bookId}") { backStackEntry ->
+            val bookId = backStackEntry.arguments?.getString("bookId") ?: return@composable
+            BrowseTextScreen(
+                bookId = bookId,
+                onBack = { nav.popBackStack() },
+                // Picking a word writes the new position to the DB, so the
+                // reader needs a fresh instance to pick it up — same reload
+                // path a mode switch already uses, not a plain pop back.
+                onWordSelected = { nav.navigateMode("reader/$bookId") }
             )
         }
         composable("original/pdf/{bookId}") { backStackEntry ->

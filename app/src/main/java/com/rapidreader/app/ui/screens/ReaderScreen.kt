@@ -55,6 +55,7 @@ fun ReaderScreen(
     bookId: String,
     onBack: () -> Unit,
     onOpenOriginal: (OriginalKind) -> Unit,
+    onBrowseText: () -> Unit,
     vm: ReaderViewModel = viewModel()
 ) {
     LaunchedEffect(bookId) { vm.load(bookId) }
@@ -88,8 +89,11 @@ fun ReaderScreen(
         ) {
             TextButton(onClick = onBack) { Text("\u2190 Library", color = DimColor) }
             Text("${ui.idx + 1} / ${ui.words.size} \u00b7 ~$minutesLeft min left", color = DimColor, fontSize = 13.sp)
-            ui.originalKind?.let { kind ->
-                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+            Row {
+                TextButton(onClick = onBrowseText) { Text("Browse", color = DimColor) }
+                ui.originalKind?.let { kind ->
+                    TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
