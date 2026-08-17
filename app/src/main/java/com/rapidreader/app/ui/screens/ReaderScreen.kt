@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -34,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -81,22 +84,31 @@ fun ReaderScreen(
     val minutesLeft = if (ui.wpm > 0) String.format("%.1f", (ui.words.size - ui.idx) / ui.wpm.toFloat()) else "0"
     val frameFontSize = when (frame.size) { 1 -> 40.sp; 2 -> 34.sp; 3 -> 30.sp; 4 -> 26.sp; else -> 22.sp }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    // Scrollable so the settings panel stays reachable in landscape or on
+    // short screens, where the fixed word-display box alone can eat most of
+    // the available height and leave no room for Speed/Words per frame/Audio.
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        // Two rows, not one: on narrow phones (~360dp portrait), cramming the
+        // back button, progress text, and both mode-switch buttons into a
+        // single Row overflowed and wrapped "Browse" letter-by-letter.
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(onClick = onBack) { Text("\u2190 Library", color = DimColor) }
-            Text("${ui.idx + 1} / ${ui.words.size} \u00b7 ~$minutesLeft min left", color = DimColor, fontSize = 13.sp)
-            Row {
-                TextButton(onClick = onBrowseText) { Text("Browse", color = DimColor) }
-                ui.originalKind?.let { kind ->
-                    TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
-                }
+            Text(
+                "${ui.idx + 1} / ${ui.words.size} \u00b7 ~$minutesLeft min left",
+                color = DimColor, fontSize = 13.sp, maxLines = 1
+            )
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onBrowseText) { Text("Browse", color = DimColor) }
+            ui.originalKind?.let { kind ->
+                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
         Box(
             Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(PanelColor),
@@ -106,12 +118,17 @@ fun ReaderScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
-                        textAlign = TextAlign.End, modifier = Modifier.width(100.dp)
+                        textAlign = TextAlign.End, softWrap = false, overflow = TextOverflow.Clip,
+                        modifier = Modifier.width(100.dp)
                     )
-                    Text(orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+                    Text(
+                        orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        fontWeight = FontWeight.Bold, softWrap = false, overflow = TextOverflow.Clip
+                    )
                     Text(
                         post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
-                        textAlign = TextAlign.Start, modifier = Modifier.width(100.dp)
+                        textAlign = TextAlign.Start, softWrap = false, overflow = TextOverflow.Clip,
+                        modifier = Modifier.width(100.dp)
                     )
                 }
             } else {
@@ -119,11 +136,11 @@ fun ReaderScreen(
                     frame.forEachIndexed { i, w ->
                         if (i > 0) Spacer(Modifier.width(10.dp))
                         if (i == focusOffset) {
-                            Text(pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
-                            Text(orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
-                            Text(post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
+                            Text(pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, softWrap = false, overflow = TextOverflow.Clip)
+                            Text(orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold, softWrap = false, overflow = TextOverflow.Clip)
+                            Text(post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, softWrap = false, overflow = TextOverflow.Clip)
                         } else {
-                            Text(w, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
+                            Text(w, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, softWrap = false, overflow = TextOverflow.Clip)
                         }
                     }
                 }
