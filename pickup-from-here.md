@@ -8,10 +8,23 @@ that should survive a machine switch belongs here instead.
 
 - **Fast reading (RSVP)** and **original-form reading** (real PDF pages /
   EPUB chapters) both work. Original-form reading shipped in
-  [PR #2](https://github.com/loko087/LeerRapidon/pull/2) — check whether
-  it's merged yet.
+  [PR #2](https://github.com/loko087/LeerRapidon/pull/2) — **merged**.
 - Books only get the "Original" button if they were imported after that
   PR landed; older books don't have a preserved original file to show.
+- **Words-per-frame RSVP mode** shipped in
+  [PR #3](https://github.com/loko087/LeerRapidon/pull/3) — **merged**. A
+  1-5 slider next to Speed controls how many words flash together per
+  frame; Audio mode respects the same frame size and highlights whichever
+  word is actively being spoken. Global, session-only setting (like Audio
+  mode), not persisted per-book.
+  - Audio mode speaks the whole remaining book as one continuous TTS
+    utterance (`ReaderViewModel.speakFromIdx`) — a per-frame-utterance
+    version was tried first and reverted because engine startup latency
+    per call made the Speed slider feel like it did nothing.
+  - TTS rate is clamped to 3x (pre-existing, in `SpeechController`), so
+    Audio mode stops getting faster above ~540-560 wpm — there's a UI
+    note for this now, left in place at the user's request rather than
+    raised or removed.
 
 ## Next planned feature: page/section navigation for the fast reader
 
