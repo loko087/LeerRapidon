@@ -25,6 +25,48 @@ that should survive a machine switch belongs here instead.
     Audio mode stops getting faster above ~540-560 wpm — there's a UI
     note for this now, left in place at the user's request rather than
     raised or removed.
+- **Browse full text** built (`BrowseTextScreen.kt` / `BrowseTextViewModel.kt`,
+  `RsvpEngine.paragraphs()`) — **not yet committed/pushed**, check
+  `git status` before assuming this landed. Shows the whole book as
+  flowing paragraph text (reached via a new "Browse" button next to
+  "Original" in the reader), current word highlighted, tap any word to
+  jump the RSVP reader there. `RsvpEngine.paragraphs()` groups the same
+  words `tokenize()` produces (capped at 120 words/paragraph so a
+  no-blank-lines source can't produce one giant unvirtualized
+  `LazyColumn` item) — word order/count is provably identical to
+  `tokenize()`, so a paragraph word's index is a valid RSVP word index.
+  Picking a word persists it via `BookRepository.updateProgress` then
+  forces a fresh reader instance (same `navigateMode` mechanism as mode
+  switches) to pick it up.
+
+## Next planned feature: font type & size, for both reading modes
+
+User wants to control font family and font size, applied consistently
+in **both** the RSVP reader (`ReaderScreen.kt`) and the Browse full-text
+view (`BrowseTextScreen.kt`) — one shared setting, not independent
+per-screen choices.
+
+**Not yet decided — needs a real design conversation before building:**
+- **Scope/persistence:** global session-only (like `wordsPerFrame`/
+  `audioMode` today — resets each time the reader reopens) or something
+  that actually persists across app restarts? Font choice feels more
+  like a lasting preference than a per-session toggle, unlike the
+  precedents so far — worth asking rather than assuming either way.
+  There's no persistence mechanism for a cross-screen shared setting
+  yet (no SharedPreferences/DataStore in this codebase currently; `wpm`
+  persists but per-book via Room, which isn't the right shape for a
+  single UI-wide preference).
+- **Font type options:** a curated preset list (e.g. serif/sans/mono,
+  matching `FontFamily.Serif` already used for the RSVP word display) vs.
+  exposing more of the system's available fonts?
+- **Font size interaction with existing scaling:** `ReaderScreen.kt`
+  already auto-shrinks `frameFontSize` as `wordsPerFrame` grows (40sp at
+  1 word down to 22sp at 5). A user font-size preference needs to
+  compose with that, not just replace it — e.g. as a multiplier/base
+  size rather than a fixed sp value.
+- **Where the controls live:** extend the existing settings panel
+  (alongside Speed / Words per frame / Audio mode) in the reader, and
+  something analogous in the Browse screen's top bar?
 
 ## Next planned feature: page/section navigation for the fast reader
 
