@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -104,12 +105,19 @@ private fun BookCard(
     ) {
         Row(
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column {
+            // weight(1f) so a long title can never push the actions off the
+            // edge of the card \u2014 it wraps/ellipsizes within its own share
+            // of the row instead.
+            Column(Modifier.weight(1f)) {
+                Text(
+                    book.title, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(book.title, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("$pct% \u00b7 ${relTime(book.updatedAt)}", color = DimColor, fontSize = 12.sp)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         book.source.uppercase(), color = DimColor, fontSize = 11.sp,
@@ -119,9 +127,8 @@ private fun BookCard(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
-                Spacer(Modifier.height(4.dp))
-                Text("$pct% \u00b7 ${relTime(book.updatedAt)}", color = DimColor, fontSize = 12.sp)
             }
+            Spacer(Modifier.width(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 book.originalKind()?.let { kind ->
                     TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
