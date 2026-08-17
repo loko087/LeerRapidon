@@ -46,6 +46,10 @@ import com.rapidreader.app.theme.PivotColor
 import com.rapidreader.app.theme.TextColor
 import com.rapidreader.app.ui.viewmodel.ReaderViewModel
 
+// SpeechController clamps the TTS rate at 3x (SpeechController.kt), so speech
+// stops getting any faster once wpm/180 would exceed that — around here.
+private const val AUDIO_SPEED_CAP_WPM = 560
+
 @Composable
 fun ReaderScreen(
     bookId: String,
@@ -63,12 +67,18 @@ fun ReaderScreen(
         return
     }
 
-    val word = ui.words.getOrElse(ui.idx) { "" }
+    val frameEnd = (ui.idx + ui.wordsPerFrame).coerceIn(ui.idx, ui.words.size)
+    val frame = ui.words.subList(ui.idx, frameEnd)
+    // In audio mode the pivot tracks whichever word speech is on right now;
+    // otherwise it's the visual fixation point at the middle of the frame.
+    val focusOffset = if (ui.audioMode) ui.spokenOffset.coerceIn(0, (frame.size - 1).coerceAtLeast(0)) else frame.size / 2
+    val word = frame.getOrElse(focusOffset) { "" }
     val o = RsvpEngine.orpIndex(word).coerceAtMost((word.length - 1).coerceAtLeast(0))
     val pre = word.take(o)
     val orp = if (word.isNotEmpty()) word.substring(o, (o + 1).coerceAtMost(word.length)) else ""
     val post = if (word.isNotEmpty()) word.substring((o + 1).coerceAtMost(word.length)) else ""
     val minutesLeft = if (ui.wpm > 0) String.format("%.1f", (ui.words.size - ui.idx) / ui.wpm.toFloat()) else "0"
+    val frameFontSize = when (frame.size) { 1 -> 40.sp; 2 -> 34.sp; 3 -> 30.sp; 4 -> 26.sp; else -> 22.sp }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(
@@ -88,16 +98,31 @@ fun ReaderScreen(
             Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(PanelColor),
             contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    pre, color = TextColor, fontSize = 40.sp, fontFamily = FontFamily.Serif,
-                    textAlign = TextAlign.End, modifier = Modifier.width(100.dp)
-                )
-                Text(orp, color = PivotColor, fontSize = 40.sp, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
-                Text(
-                    post, color = TextColor, fontSize = 40.sp, fontFamily = FontFamily.Serif,
-                    textAlign = TextAlign.Start, modifier = Modifier.width(100.dp)
-                )
+            if (frame.size <= 1) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        textAlign = TextAlign.End, modifier = Modifier.width(100.dp)
+                    )
+                    Text(orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+                    Text(
+                        post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        textAlign = TextAlign.Start, modifier = Modifier.width(100.dp)
+                    )
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    frame.forEachIndexed { i, w ->
+                        if (i > 0) Spacer(Modifier.width(10.dp))
+                        if (i == focusOffset) {
+                            Text(pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
+                            Text(orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif, fontWeight = FontWeight.Bold)
+                            Text(post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
+                        } else {
+                            Text(w, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif)
+                        }
+                    }
+                }
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -132,6 +157,22 @@ fun ReaderScreen(
                 value = ui.wpm.toFloat(),
                 onValueChange = { vm.setWpm(it.toInt()) },
                 valueRange = 100f..900f, steps = 31,
+                colors = SliderDefaults.colors(thumbColor = PivotColor, activeTrackColor = PivotColor, inactiveTrackColor = LineColor)
+            )
+            if (ui.audioMode && ui.wpm > AUDIO_SPEED_CAP_WPM) {
+                Text(
+                    "Audio mode tops out around $AUDIO_SPEED_CAP_WPM wpm — higher speeds won't read any faster.",
+                    color = PivotColor, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("Words per frame", color = DimColor, fontSize = 14.sp)
+                Text("${ui.wordsPerFrame}", color = TextColor, fontSize = 14.sp)
+            }
+            Slider(
+                value = ui.wordsPerFrame.toFloat(),
+                onValueChange = { vm.setWordsPerFrame(it.toInt()) },
+                valueRange = 1f..5f, steps = 3,
                 colors = SliderDefaults.colors(thumbColor = PivotColor, activeTrackColor = PivotColor, inactiveTrackColor = LineColor)
             )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {

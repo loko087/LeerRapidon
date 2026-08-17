@@ -52,9 +52,12 @@ class SpeechController(context: Context) {
                 if (utteranceId == utteranceIds.last()) onDone()
             }
             @Deprecated("Deprecated in Java", ReplaceWith(""))
-            override fun onError(utteranceId: String?) { onError() }
+            override fun onError(utteranceId: String?) { if (utteranceId in offsetsByUtteranceId) onError() }
             override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                val base = offsetsByUtteranceId[utteranceId] ?: 0
+                // Once a newer speak() call replaces this listener, Android can still
+                // deliver in-flight callbacks from the previous utterance to it — ignore
+                // anything not belonging to this call rather than treating it as offset 0.
+                val base = offsetsByUtteranceId[utteranceId] ?: return
                 onRangeStart(base + start)
             }
         })
