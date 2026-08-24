@@ -212,3 +212,26 @@ Don't assume one of these and build it — confirm the approach with the
 user first, since it changes the UI (replacing a slider) and possibly
 the data model (tracking position per-section instead of a raw word
 index).
+
+## Nice to have: persist the TTS reading-language choice
+
+The language picker added in [PR #8](https://github.com/loko087/LeerRapidon/pull/8)
+(`ReaderViewModel.setLanguage` / `ReaderScreen.kt`'s "Language" row) is
+session-only, same as `wordsPerFrame`/`audioMode` today — it resets to
+English every time a book is reopened. User explicitly deferred deciding
+on persistence here ("let's leave that for the 'what to do next', like a
+nice to have") rather than asking for it now.
+
+**Not yet decided — needs a real design conversation before building,**
+same open question as the font-options item above (this codebase still
+has no cross-screen/cross-session preference store — no
+SharedPreferences/DataStore, just per-book Room columns):
+- Global (one language for all books) or per-book (a German book and an
+  Italian book each remember their own)? Per-book fits the actual
+  problem better — the language is a property of the text, not a
+  standing user preference — but needs a new `BookEntity` column +
+  migration rather than reusing whatever mechanism the font settings end
+  up with.
+- Worth building both this and font persistence on the same underlying
+  mechanism if/when either gets picked up, rather than solving storage
+  twice.
