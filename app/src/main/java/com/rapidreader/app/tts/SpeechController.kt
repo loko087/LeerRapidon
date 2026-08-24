@@ -15,12 +15,72 @@ import java.util.UUID
 class SpeechController(context: Context) {
     private var tts: TextToSpeech? = null
     private var ready = false
+    // The engine otherwise defaults to the device's system language, not the
+    // language of whatever's actually being read — remembered here so a
+    // setLanguage() call made before init finishes (a real race: init is
+    // async) still takes effect once the engine comes up.
+    private var pendingLanguage: Locale? = null
 
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             ready = status == TextToSpeech.SUCCESS
-            if (ready) tts?.language = Locale.getDefault()
+            if (ready) pendingLanguage?.let(::applyLanguage)
         }
+    }
+
+    /** Languages usable for reading, as autonyms sorted alphabetically (each
+     *  language's own name for itself — "Italiano" for Italian rather than
+     *  whatever the UI locale would translate it to, the same convention
+     *  system language pickers use). Combines two sources because engines
+     *  are inconsistent about which one they populate: getVoices() (the
+     *  precise, modern API) and a probe of common languages via
+     *  isLanguageAvailable() — some engines/devices return an empty voice
+     *  list even though the older locale-availability check, and actual
+     *  synthesis, both work fine. Empty until the engine finishes
+     *  initializing. */
+    fun availableLanguages(): List<Locale> {
+        val engine = tts ?: return emptyList()
+        val fromVoices = engine.voices?.mapNotNull { it.locale }.orEmpty()
+        val fromProbe = COMMON_LOCALES.filter { isUsable(engine, it) }
+        // lowercase for the sort key — languages don't agree on capitalizing
+        // their own autonym (e.g. "italiano" vs "Deutsch"), and a plain
+        // case-sensitive sort would group every capitalized one before any
+        // lowercase one instead of interleaving them alphabetically.
+        return (fromVoices + fromProbe).distinct().sortedBy { it.getDisplayName(it).lowercase(it) }
+    }
+
+    /** Switches the reading language. Returns false if no voice is
+     *  installed for it (or the engine isn't ready yet) — playback then
+     *  falls back to whatever it was using before rather than breaking. */
+    fun setLanguage(locale: Locale): Boolean {
+        pendingLanguage = locale
+        return if (ready) applyLanguage(locale) else false
+    }
+
+    private fun applyLanguage(locale: Locale): Boolean {
+        val engine = tts ?: return false
+        val ok = isUsable(engine, locale)
+        if (ok) engine.setLanguage(locale)
+        return ok
+    }
+
+    private fun isUsable(engine: TextToSpeech, locale: Locale): Boolean {
+        val result = engine.isLanguageAvailable(locale)
+        return result == TextToSpeech.LANG_AVAILABLE ||
+            result == TextToSpeech.LANG_COUNTRY_AVAILABLE ||
+            result == TextToSpeech.LANG_COUNTRY_VAR_AVAILABLE
+    }
+
+    companion object {
+        // Probed in addition to getVoices() when building the language
+        // picker's list — covers the common case even on an engine whose
+        // getVoices() is unreliable. Not exhaustive: getVoices() still
+        // contributes anything installed beyond this list.
+        private val COMMON_LOCALES = listOf(
+            Locale.getDefault(), Locale.ENGLISH, Locale.UK, Locale.FRENCH, Locale.GERMAN,
+            Locale.ITALIAN, Locale("es"), Locale("pt"), Locale.JAPANESE, Locale.CHINESE,
+            Locale("hi"), Locale("ar"), Locale("ru"), Locale("nl"), Locale("ko")
+        )
     }
 
     fun speak(
