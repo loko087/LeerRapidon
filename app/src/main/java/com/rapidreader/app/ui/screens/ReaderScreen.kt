@@ -3,6 +3,7 @@ package com.rapidreader.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -30,15 +33,24 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +62,7 @@ import com.rapidreader.app.theme.PanelColor
 import com.rapidreader.app.theme.PivotColor
 import com.rapidreader.app.theme.TextColor
 import com.rapidreader.app.ui.viewmodel.ReaderViewModel
+import java.util.Locale
 
 // SpeechController clamps the TTS rate at 3x (SpeechController.kt), so speech
 // stops getting any faster once wpm/180 would exceed that — around here.
@@ -122,25 +135,38 @@ fun ReaderScreen(
         }
         Spacer(Modifier.height(8.dp))
 
-        Box(
+        BoxWithConstraints(
             Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(PanelColor),
             contentAlignment = Alignment.Center
         ) {
             if (frame.size <= 1) {
+                // Pre/post sit in equal-width columns so the pivot letter
+                // (orp) stays in a constant screen position as words change
+                // length — the whole point of pivot-aligned RSVP. They used
+                // to be a hardcoded 100dp regardless of how much wider the
+                // box actually was, clipping long words well before the box
+                // itself ran out of room (e.g. "awareness" losing its last
+                // letter). Now they use the real available width, and only
+                // shrink the font — together, not independently, so the
+                // pivot position doesn't jump between pre/orp/post — for the
+                // rare word that's too long even for that.
+                val textMeasurer = rememberTextMeasurer()
+                val sideWidth = ((maxWidth - 56.dp) / 2).coerceAtLeast(60.dp)
+                val fittedSize = rememberFittedWordFontSize(textMeasurer, pre, post, frameFontSize, 14.sp, sideWidth)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        pre, color = TextColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         textAlign = TextAlign.End, softWrap = false, overflow = TextOverflow.Clip,
-                        modifier = Modifier.width(100.dp)
+                        modifier = Modifier.width(sideWidth)
                     )
                     Text(
-                        orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        orp, color = PivotColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold, softWrap = false, overflow = TextOverflow.Clip
                     )
                     Text(
-                        post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        post, color = TextColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         textAlign = TextAlign.Start, softWrap = false, overflow = TextOverflow.Clip,
-                        modifier = Modifier.width(100.dp)
+                        modifier = Modifier.width(sideWidth)
                     )
                 }
             } else {
@@ -215,6 +241,16 @@ fun ReaderScreen(
                 )
                 Text("Audio mode \u2014 voice reads aloud, words follow speech", color = TextColor, fontSize = 13.sp)
             }
+            if (ui.audioMode) {
+                LanguagePicker(
+                    current = ui.language,
+                    // Lambda, not a pre-computed list: ReaderScreen recomposes
+                    // on every word during playback, and this only actually
+                    // needs to run when the dropdown is opened.
+                    availableLanguages = { vm.availableLanguages() },
+                    onSelect = { vm.setLanguage(it) }
+                )
+            }
             if (ui.audioMode && !ui.ttsOk) {
                 Text(
                     "No voice installed for this language \u2014 continuing in visual mode.",
@@ -222,5 +258,68 @@ fun ReaderScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LanguagePicker(
+    current: Locale,
+    availableLanguages: () -> List<Locale>,
+    onSelect: (Locale) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("Language", color = DimColor, fontSize = 14.sp)
+        Box {
+            TextButton(onClick = { expanded = true }) {
+                Text(current.getDisplayName(current), color = TextColor)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                // The device's engine may have no voices installed at all
+                // yet (first launch, before any language pack download) \u2014
+                // an empty menu is a reasonable, non-crashing outcome.
+                availableLanguages().forEach { locale ->
+                    DropdownMenuItem(
+                        text = { Text(locale.getDisplayName(locale)) },
+                        onClick = { onSelect(locale); expanded = false }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// Largest font size (down to [minFontSize]) at which both [pre] and [post]
+// measure within [maxSideWidth] \u2014 shrunk together, not independently, so
+// the pivot letter's screen position doesn't jump around as it would if
+// pre/orp/post could each pick a different size.
+@Composable
+private fun rememberFittedWordFontSize(
+    textMeasurer: TextMeasurer,
+    pre: String,
+    post: String,
+    baseFontSize: TextUnit,
+    minFontSize: TextUnit,
+    maxSideWidth: Dp
+): TextUnit {
+    val density = LocalDensity.current
+    return remember(pre, post, baseFontSize, maxSideWidth, density) {
+        val maxWidthPx = with(density) { maxSideWidth.toPx() }
+        var size = baseFontSize
+        while (true) {
+            val style = TextStyle(fontSize = size, fontFamily = FontFamily.Serif)
+            val preFits = pre.isEmpty() || textMeasurer.measure(pre, style).size.width <= maxWidthPx
+            val postFits = post.isEmpty() || textMeasurer.measure(post, style).size.width <= maxWidthPx
+            // Checked at minFontSize too (not just strictly above it) so an
+            // even more extreme word's floor size still reflects an actual
+            // measurement, not just wherever the step size happened to land.
+            if ((preFits && postFits) || size <= minFontSize) break
+            size = (size.value - 2f).sp
+        }
+        if (size < minFontSize) minFontSize else size
     }
 }

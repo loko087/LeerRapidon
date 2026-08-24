@@ -4,6 +4,100 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
+## Book covers, narrow-screen fixes, and a TTS language picker (2026-08-24)
+
+On [PR #8](https://github.com/loko087/LeerRapidon/pull/8) — **open, not
+yet merged to `main`** as of this writing. Four pieces, in commit order:
+
+**1. Cover thumbnails.** Every imported book gets a small cover on its
+`LibraryScreen` card, tried in this order:
+1. **EPUB**: the cover image declared in the OPF manifest
+   (`EpubParser.findCoverHref` in `EpubStructure.kt` — tries EPUB3
+   `properties="cover-image"`, then EPUB2 `<meta name="cover">`, then an
+   id/filename that looks like a cover). Pulled straight from the already-
+   parsed zip entries in `TextExtractor.extractEpub`.
+2. **PDF**: no embedded "cover" concept, so `TextExtractor.renderCover`
+   renders page 1 with `PDFRenderer` (same library already used for OCR)
+   at a DPI computed to land near a target width regardless of page size.
+3. **Fallback (any source, including plain text/paste)**: a title search
+   against the Open Library APIs — `OpenLibraryCovers.kt` hits
+   `openlibrary.org/search.json?title=...` for a `cover_i`, then downloads
+   `covers.openlibrary.org/b/id/<id>-L.jpg`. This is the app's **first
+   network call ever** — added `INTERNET` permission. Runs in the
+   background *after* the book is already saved (`BookRepository`'s own
+   `repoScope`, not tied to any ViewModel), so a slow/absent network never
+   blocks the import; the Flow-backed library list just updates in place
+   if a match lands. Every failure path (no match, no network, timeout)
+   returns null — never fails the import.
+   Covers are normalized to an on-disk JPEG (`saveCover` in
+   `BookRepository.kt`, capped at 480px wide — bigger than the ~44dp list
+   thumbnail needs, but the same file also backs the tap-to-zoom preview
+   below) at `<filesDir>/books/<id>.cover`, tracked via a new
+   `BookEntity.coverPath` column (`AppDatabase` MIGRATION_2_3 — real
+   migration, not destructive). `BookRepository.backfillMissingCovers()`
+   runs once per app session (from `LibraryViewModel.init`) to retroactively
+   fill in covers for books saved before this feature existed, preferring
+   their preserved original file over an Open Library search.
+
+**2. Tap-to-zoom cover preview.** Tapping a library card's cover opens it
+centered and enlarged over a dark scrim (`CoverPreviewDialog` in
+`LibraryScreen.kt`, a Compose `Dialog`). Dismiss via the X button, tapping
+the scrim outside the image, or back (the `Dialog`'s own window intercepts
+back for free) — tapping the image itself does nothing, only the
+surrounding scrim dismisses.
+
+**3. Two narrow-screen (360dp) bugs, found by testing at that width (the
+dev emulator defaults to a wider ~360-390dp+ but still needs an explicit
+`adb shell wm size` override to reproduce a truly compact phone) rather
+than just the emulator's default:**
+- The library card's source badge ("EPUB"/"PDF"/"TXT") could wrap
+  vertically into one letter per line once the cover thumbnail left too
+  little row width alongside the pre-existing Original/Delete buttons.
+  Fixed by splitting Original/Delete onto their own row below the
+  cover/title/badge row (same pattern as the existing "Browse" button fix
+  in `ReaderScreen.kt` from PR #5), plus `maxLines`/`softWrap`/`overflow`
+  on the badge text as a second line of defense.
+- The RSVP single-word display clipped long words (e.g. "awareness"
+  losing its last letter): the pre/post pivot-aligned columns in
+  `ReaderScreen.kt` were a hardcoded 100dp regardless of how much wider
+  the display box actually was (typically 130dp+ of unused room). Now
+  sized from the box's real available width via `BoxWithConstraints`, with
+  font-shrink (pre/post together via `rememberFittedWordFontSize`, so the
+  pivot position doesn't jump) as a fallback for the rare word too long
+  even for that. A deliberately pathological 25-letter test word still
+  clips slightly at the 14sp floor — an accepted, appropriately-scoped
+  limit, not something worth chasing further into illegibility.
+
+**4. TTS reading-language picker.** `SpeechController` used to set
+`tts.language = Locale.getDefault()` — the *device's* system language, not
+the language of whatever's actually being read. On a phone set to Italian,
+an English book got read with Italian pronunciation. Now defaults to
+English (most likely to match an imported book regardless of device
+language) and exposes `setLanguage()`/`availableLanguages()` for a new
+"Language" row in the reader's Audio mode panel — a dropdown of every
+installed language, shown as autonyms ("Italiano", not a translated name).
+`availableLanguages()` combines `getVoices()` with a probe of common
+languages via `isLanguageAvailable()`, since engines are inconsistent
+about which of the two APIs they actually populate (confirmed on the test
+emulator: `getVoices()` returns empty for a beat after the engine binds,
+before lazily populating). Session-scoped like the existing
+Speed/Words-per-frame/Audio mode settings — **not persisted** across
+reader sessions; ask before changing that if a future request implies it
+should be.
+
+All four live-tested on the emulator (screenshots in the session
+transcript, not reproduced here) — including a real end-to-end language
+switch to Italian and back, and the narrow-screen fixes specifically
+re-tested at a forced 360dp width where the original bugs reproduced.
+**Not tested live:** the EPUB embedded-cover path (no test EPUB with a
+cover on hand) — worth a spot-check with a real EPUB before treating it
+as fully proven.
+
+**Not done / explicitly out of scope:** no author-aware Open Library
+search (title-only query — a generic title could mismatch), no manual
+"search again"/"change cover" affordance, no cover preview on
+`AddBookScreen` before saving, no persistence for the TTS language choice.
+
 ## Where things stand (2026-08-17)
 
 All of the below is **merged into `main`** as of this writing (PRs #1–#5)
@@ -118,3 +212,26 @@ Don't assume one of these and build it — confirm the approach with the
 user first, since it changes the UI (replacing a slider) and possibly
 the data model (tracking position per-section instead of a raw word
 index).
+
+## Nice to have: persist the TTS reading-language choice
+
+The language picker added in [PR #8](https://github.com/loko087/LeerRapidon/pull/8)
+(`ReaderViewModel.setLanguage` / `ReaderScreen.kt`'s "Language" row) is
+session-only, same as `wordsPerFrame`/`audioMode` today — it resets to
+English every time a book is reopened. User explicitly deferred deciding
+on persistence here ("let's leave that for the 'what to do next', like a
+nice to have") rather than asking for it now.
+
+**Not yet decided — needs a real design conversation before building,**
+same open question as the font-options item above (this codebase still
+has no cross-screen/cross-session preference store — no
+SharedPreferences/DataStore, just per-book Room columns):
+- Global (one language for all books) or per-book (a German book and an
+  Italian book each remember their own)? Per-book fits the actual
+  problem better — the language is a property of the text, not a
+  standing user preference — but needs a new `BookEntity` column +
+  migration rather than reusing whatever mechanism the font settings end
+  up with.
+- Worth building both this and font persistence on the same underlying
+  mechanism if/when either gets picked up, rather than solving storage
+  twice.

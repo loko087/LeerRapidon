@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 data class ReaderUiState(
     val title: String = "",
@@ -26,6 +27,12 @@ data class ReaderUiState(
     val spokenOffset: Int = 0,
     val playing: Boolean = false,
     val audioMode: Boolean = false,
+    // Defaults to English rather than the device's system language — the
+    // TTS engine otherwise reads whatever's imported using the phone's UI
+    // language's pronunciation rules, which is wrong far more often than
+    // it's right (an English book on an Italian phone gets read as if the
+    // words were Italian). Overridable per session via the language picker.
+    val language: Locale = Locale.ENGLISH,
     val ttsOk: Boolean = true,
     val loading: Boolean = true,
     val originalKind: OriginalKind? = null
@@ -34,6 +41,10 @@ data class ReaderUiState(
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = BookRepository(app)
     private val speech = SpeechController(app)
+
+    init {
+        speech.setLanguage(Locale.ENGLISH)
+    }
 
     private val _ui = MutableStateFlow(ReaderUiState())
     val ui: StateFlow<ReaderUiState> = _ui.asStateFlow()
@@ -105,6 +116,18 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         playGeneration++
         playJob?.cancel(); speech.stop()
         _ui.value = _ui.value.copy(audioMode = on, playing = false, spokenOffset = 0)
+    }
+
+    /** Languages with an installed voice, for the reader's language picker. */
+    fun availableLanguages(): List<Locale> = speech.availableLanguages()
+
+    fun setLanguage(locale: Locale) {
+        val ok = speech.setLanguage(locale)
+        _ui.value = _ui.value.copy(language = locale, ttsOk = ok)
+        if (_ui.value.playing && _ui.value.audioMode) {
+            playJob?.cancel(); speech.stop()
+            speakFromIdx(_ui.value.idx + _ui.value.spokenOffset)
+        }
     }
 
     fun setWordsPerFrame(count: Int) {

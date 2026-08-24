@@ -1,9 +1,17 @@
 package com.rapidreader.app.data
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import com.rapidreader.app.extract.OpenLibraryCovers
+import com.rapidreader.app.extract.TextExtractor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -15,6 +23,9 @@ class BookRepository(context: Context) {
         File(appContext.filesDir, "books").apply { mkdirs() }
     }
     private val originals by lazy { OriginalStore(booksDir) }
+    // Outlives any single addBook() call so the background Open Library
+    // lookup isn't cancelled if the screen that triggered the import closes.
+    private val repoScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun observeBooks(): Flow<List<BookEntity>> = dao.getAll()
 
@@ -42,12 +53,14 @@ class BookRepository(context: Context) {
         source: String,
         text: String,
         wordCount: Int,
-        staged: StagedOriginal? = null
+        staged: StagedOriginal? = null,
+        cover: ByteArray? = null
     ): String = withContext(Dispatchers.IO) {
         val id = "b_" + System.currentTimeMillis().toString(36) +
             (1..5).map { ('a'..'z').random() }.joinToString("")
         File(booksDir, "$id.txt").writeText(text)
         val originalPath = staged?.let { originals.commit(it, id) }
+        val coverPath = cover?.let { saveCover(id, it) }
         dao.upsert(
             BookEntity(
                 id = id,
@@ -57,10 +70,79 @@ class BookRepository(context: Context) {
                 idx = 0,
                 wpm = 300,
                 updatedAt = System.currentTimeMillis(),
-                originalPath = originalPath
+                originalPath = originalPath,
+                coverPath = coverPath
             )
         )
+        // The file itself had no cover art (plain text, a paste, or an EPUB
+        // without one) — try Open Library in the background. Non-fatal and
+        // never blocks the import: the Flow-backed library list just updates
+        // in place if a match turns up.
+        if (coverPath == null) {
+            repoScope.launch { fetchCoverFromOpenLibrary(id, title) }
+        }
         id
+    }
+
+    private suspend fun fetchCoverFromOpenLibrary(id: String, title: String) {
+        val bytes = OpenLibraryCovers.findByTitle(title) ?: return
+        val coverPath = saveCover(id, bytes) ?: return
+        dao.updateCover(id, coverPath)
+    }
+
+    /** Retroactively fills in covers for books saved before cover thumbnails
+     *  existed. Same priority as a fresh import — the preserved original
+     *  (PDF first page / EPUB embedded cover) first, Open Library title
+     *  search otherwise — just run against rows already in the DB. Meant to
+     *  be fired once in the background per app session; cheap and harmless
+     *  to repeat since it only ever looks at books still missing a cover. */
+    suspend fun backfillMissingCovers() = withContext(Dispatchers.IO) {
+        dao.getAll().first().filter { it.coverPath == null }.forEach { book ->
+            val bytes = coverFromOriginal(book) ?: OpenLibraryCovers.findByTitle(book.title)
+            val coverPath = bytes?.let { saveCover(book.id, it) } ?: return@forEach
+            dao.updateCover(book.id, coverPath)
+        }
+    }
+
+    private suspend fun coverFromOriginal(book: BookEntity): ByteArray? {
+        val kind = book.originalKind() ?: return null
+        val file = getOriginalFile(book.id) ?: return null
+        return when (kind) {
+            OriginalKind.PDF -> TextExtractor.renderPdfCover(file)
+            OriginalKind.EPUB -> TextExtractor.epubCoverFromDir(file)
+        }
+    }
+
+    /** Normalizes any source (EPUB, PDF render, or a downloaded cover) down to
+     *  a small on-disk JPEG so storage and later decode cost stay bounded.
+     *  480px wide is bigger than the ~44dp library thumbnail needs, but the
+     *  same file backs the tap-to-zoom preview, which wants the headroom. */
+    private fun saveCover(id: String, bytes: ByteArray): String? = try {
+        val maxWidth = 480
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        val sample = if (bounds.outWidth > maxWidth) bounds.outWidth / maxWidth else 1
+        val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sample.coerceAtLeast(1) }
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts)
+        if (decoded == null) null
+        else {
+            val bitmap = if (decoded.width > maxWidth) {
+                val ratio = maxWidth.toFloat() / decoded.width
+                Bitmap.createScaledBitmap(decoded, maxWidth, (decoded.height * ratio).toInt(), true)
+            } else decoded
+            val f = File(booksDir, "$id.cover")
+            f.outputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out) }
+            f.name
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /** File holding the cover thumbnail, or null if there isn't one (yet). */
+    fun resolveCover(coverPath: String?): File? {
+        if (coverPath.isNullOrEmpty()) return null
+        val f = File(booksDir, coverPath)
+        return if (f.exists()) f else null
     }
 
     /** File (or directory, for an unzipped EPUB) holding the preserved original, or null. */
@@ -78,6 +160,7 @@ class BookRepository(context: Context) {
 
     suspend fun deleteBook(id: String) = withContext(Dispatchers.IO) {
         File(booksDir, "$id.txt").delete()
+        File(booksDir, "$id.cover").delete()
         originals.delete(id)
         dao.delete(id)
     }
