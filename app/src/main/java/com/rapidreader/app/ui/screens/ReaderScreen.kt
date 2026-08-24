@@ -26,6 +26,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +65,16 @@ fun ReaderScreen(
 ) {
     LaunchedEffect(bookId) { vm.load(bookId) }
     val ui by vm.ui.collectAsState()
+
+    // RSVP playback advances without any touch input, so the system's
+    // inactivity timeout would otherwise dim/lock the screen mid-read.
+    // Only suppress it while actually playing; paused, the screen should
+    // lock like normal.
+    val view = LocalView.current
+    DisposableEffect(ui.playing) {
+        view.keepScreenOn = ui.playing
+        onDispose { view.keepScreenOn = false }
+    }
 
     if (ui.loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
