@@ -16,6 +16,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipInputStream
 
 data class ExtractResult(
@@ -128,6 +129,15 @@ object TextExtractor {
         }
     }
 
+    /** Same first-page render as a fresh PDF import, but against an already
+     *  on-disk file — used to backfill a cover for a book that was imported
+     *  before cover thumbnails existed, from its preserved original. */
+    fun renderPdfCover(file: File): ByteArray? = try {
+        PDDocument.load(file.readBytes()).use { doc -> renderCover(doc) }
+    } catch (_: Exception) {
+        null
+    }
+
     // No text layer — fall back to on-device OCR, rendering each page to a
     // bitmap and running ML Kit's bundled (offline) text recognizer over it.
     private fun ocrPdf(context: Context, doc: PDDocument, onProgress: (String) -> Unit): String {
@@ -197,6 +207,16 @@ object TextExtractor {
         if (text.isBlank()) throw IllegalStateException("No readable text found in this EPUB")
         val cover = structure.coverPath?.let { entries[it] }
         return ExtractResult(text, structure.title ?: baseTitle(fileName), "epub", cover)
+    }
+
+    /** Same embedded-cover lookup as a fresh EPUB import, but against the
+     *  already-unzipped preserved original directory — used to backfill a
+     *  cover for a book imported before cover thumbnails existed. */
+    fun epubCoverFromDir(dir: File): ByteArray? = try {
+        val structure = EpubParser.parse { path -> File(dir, path).takeIf { it.exists() }?.readBytes() }
+        structure.coverPath?.let { File(dir, it).takeIf { f -> f.exists() }?.readBytes() }
+    } catch (_: Exception) {
+        null
     }
 
     // Regex-based tag stripping tolerates the imperfect/near-XHTML markup real

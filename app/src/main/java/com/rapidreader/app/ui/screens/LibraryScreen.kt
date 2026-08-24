@@ -124,6 +124,13 @@ private fun BookCard(
             .clickable { onClick() }
             .padding(16.dp)
     ) {
+        // Cover + title/badge live in their own row, and Original/Delete get
+        // a second row below rather than sharing this one \u2014 cramming both
+        // into a single row left the badge only a handful of dp once the
+        // cover thumbnail and both trailing buttons had taken their share,
+        // squeezing "EPUB"/"PDF" into an unreadable sliver (or, before
+        // maxLines/softWrap were added below, one letter per line). Same
+        // fix as ReaderScreen's narrow-screen "Browse" button wrap (PR #5).
         Row(
             verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()
@@ -134,20 +141,27 @@ private fun BookCard(
                 onClick = { coverFile?.let(onCoverClick) }
             )
             Spacer(Modifier.width(12.dp))
-            // weight(1f) so a long title can never push the actions off the
-            // edge of the card \u2014 it wraps/ellipsizes within its own share
-            // of the row instead.
             Column(Modifier.weight(1f)) {
                 Text(
                     book.title, color = TextColor, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                     maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(4.dp))
+                // maxLines/softWrap/overflow on both as a second line of
+                // defense: even with its own row now, a long relative-time
+                // string plus a source badge could still get tight enough to
+                // wrap, and wrapping a badge with no space to break at means
+                // one character per line \u2014 a tall, "stretched" badge instead
+                // of a clipped one. Ellipsis degrades far more gracefully.
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("$pct% \u00b7 ${relTime(book.updatedAt)}", color = DimColor, fontSize = 12.sp)
+                    Text(
+                        "$pct% \u00b7 ${relTime(book.updatedAt)}", color = DimColor, fontSize = 12.sp,
+                        maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         book.source.uppercase(), color = DimColor, fontSize = 11.sp,
+                        maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
                             .background(BgColor)
@@ -155,15 +169,18 @@ private fun BookCard(
                     )
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                book.originalKind()?.let { kind ->
-                    TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
-                }
-                TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
-            }
         }
-        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth().padding(top = 2.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            book.originalKind()?.let { kind ->
+                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+            }
+            TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
+        }
+        Spacer(Modifier.height(4.dp))
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(LineColor)) {
             Box(Modifier.fillMaxWidth(pct / 100f).fillMaxHeight().background(PivotColor))
         }

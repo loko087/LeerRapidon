@@ -5,10 +5,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.rapidreader.app.extract.OpenLibraryCovers
+import com.rapidreader.app.extract.TextExtractor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -86,6 +88,29 @@ class BookRepository(context: Context) {
         val bytes = OpenLibraryCovers.findByTitle(title) ?: return
         val coverPath = saveCover(id, bytes) ?: return
         dao.updateCover(id, coverPath)
+    }
+
+    /** Retroactively fills in covers for books saved before cover thumbnails
+     *  existed. Same priority as a fresh import — the preserved original
+     *  (PDF first page / EPUB embedded cover) first, Open Library title
+     *  search otherwise — just run against rows already in the DB. Meant to
+     *  be fired once in the background per app session; cheap and harmless
+     *  to repeat since it only ever looks at books still missing a cover. */
+    suspend fun backfillMissingCovers() = withContext(Dispatchers.IO) {
+        dao.getAll().first().filter { it.coverPath == null }.forEach { book ->
+            val bytes = coverFromOriginal(book) ?: OpenLibraryCovers.findByTitle(book.title)
+            val coverPath = bytes?.let { saveCover(book.id, it) } ?: return@forEach
+            dao.updateCover(book.id, coverPath)
+        }
+    }
+
+    private suspend fun coverFromOriginal(book: BookEntity): ByteArray? {
+        val kind = book.originalKind() ?: return null
+        val file = getOriginalFile(book.id) ?: return null
+        return when (kind) {
+            OriginalKind.PDF -> TextExtractor.renderPdfCover(file)
+            OriginalKind.EPUB -> TextExtractor.epubCoverFromDir(file)
+        }
     }
 
     /** Normalizes any source (EPUB, PDF render, or a downloaded cover) down to

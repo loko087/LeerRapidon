@@ -17,6 +17,14 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     val books: StateFlow<List<BookEntity>> = repo.observeBooks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    init {
+        // Backfills covers for books saved before cover thumbnails existed.
+        // LibraryViewModel lives for the whole app session (library is the
+        // start destination and stays on the back stack), so this fires
+        // once per launch rather than every time the library is revisited.
+        viewModelScope.launch { repo.backfillMissingCovers() }
+    }
+
     fun delete(id: String) {
         viewModelScope.launch { repo.deleteBook(id) }
     }

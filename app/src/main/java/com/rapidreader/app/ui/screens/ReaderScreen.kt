@@ -3,6 +3,7 @@ package com.rapidreader.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -30,15 +31,22 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -122,25 +130,38 @@ fun ReaderScreen(
         }
         Spacer(Modifier.height(8.dp))
 
-        Box(
+        BoxWithConstraints(
             Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)).background(PanelColor),
             contentAlignment = Alignment.Center
         ) {
             if (frame.size <= 1) {
+                // Pre/post sit in equal-width columns so the pivot letter
+                // (orp) stays in a constant screen position as words change
+                // length — the whole point of pivot-aligned RSVP. They used
+                // to be a hardcoded 100dp regardless of how much wider the
+                // box actually was, clipping long words well before the box
+                // itself ran out of room (e.g. "awareness" losing its last
+                // letter). Now they use the real available width, and only
+                // shrink the font — together, not independently, so the
+                // pivot position doesn't jump between pre/orp/post — for the
+                // rare word that's too long even for that.
+                val textMeasurer = rememberTextMeasurer()
+                val sideWidth = ((maxWidth - 56.dp) / 2).coerceAtLeast(60.dp)
+                val fittedSize = rememberFittedWordFontSize(textMeasurer, pre, post, frameFontSize, 14.sp, sideWidth)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        pre, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        pre, color = TextColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         textAlign = TextAlign.End, softWrap = false, overflow = TextOverflow.Clip,
-                        modifier = Modifier.width(100.dp)
+                        modifier = Modifier.width(sideWidth)
                     )
                     Text(
-                        orp, color = PivotColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        orp, color = PivotColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold, softWrap = false, overflow = TextOverflow.Clip
                     )
                     Text(
-                        post, color = TextColor, fontSize = frameFontSize, fontFamily = FontFamily.Serif,
+                        post, color = TextColor, fontSize = fittedSize, fontFamily = FontFamily.Serif,
                         textAlign = TextAlign.Start, softWrap = false, overflow = TextOverflow.Clip,
-                        modifier = Modifier.width(100.dp)
+                        modifier = Modifier.width(sideWidth)
                     )
                 }
             } else {
@@ -222,5 +243,36 @@ fun ReaderScreen(
                 )
             }
         }
+    }
+}
+
+// Largest font size (down to [minFontSize]) at which both [pre] and [post]
+// measure within [maxSideWidth] \u2014 shrunk together, not independently, so
+// the pivot letter's screen position doesn't jump around as it would if
+// pre/orp/post could each pick a different size.
+@Composable
+private fun rememberFittedWordFontSize(
+    textMeasurer: TextMeasurer,
+    pre: String,
+    post: String,
+    baseFontSize: TextUnit,
+    minFontSize: TextUnit,
+    maxSideWidth: Dp
+): TextUnit {
+    val density = LocalDensity.current
+    return remember(pre, post, baseFontSize, maxSideWidth, density) {
+        val maxWidthPx = with(density) { maxSideWidth.toPx() }
+        var size = baseFontSize
+        while (true) {
+            val style = TextStyle(fontSize = size, fontFamily = FontFamily.Serif)
+            val preFits = pre.isEmpty() || textMeasurer.measure(pre, style).size.width <= maxWidthPx
+            val postFits = post.isEmpty() || textMeasurer.measure(post, style).size.width <= maxWidthPx
+            // Checked at minFontSize too (not just strictly above it) so an
+            // even more extreme word's floor size still reflects an actual
+            // measurement, not just wherever the step size happened to land.
+            if ((preFits && postFits) || size <= minFontSize) break
+            size = (size.value - 2f).sp
+        }
+        if (size < minFontSize) minFontSize else size
     }
 }
