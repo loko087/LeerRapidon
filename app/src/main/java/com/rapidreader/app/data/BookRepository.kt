@@ -89,9 +89,11 @@ class BookRepository(context: Context) {
     }
 
     /** Normalizes any source (EPUB, PDF render, or a downloaded cover) down to
-     *  a small on-disk JPEG so storage and later decode cost stay bounded. */
+     *  a small on-disk JPEG so storage and later decode cost stay bounded.
+     *  480px wide is bigger than the ~44dp library thumbnail needs, but the
+     *  same file backs the tap-to-zoom preview, which wants the headroom. */
     private fun saveCover(id: String, bytes: ByteArray): String? = try {
-        val maxWidth = 300
+        val maxWidth = 480
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         val sample = if (bounds.outWidth > maxWidth) bounds.outWidth / maxWidth else 1

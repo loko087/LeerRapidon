@@ -113,8 +113,8 @@ object TextExtractor {
         if (doc.numberOfPages == 0) return null
         return try {
             val page = doc.getPage(0)
-            val targetWidthPx = 300f
-            val dpi = (targetWidthPx / (page.mediaBox.width / 72f)).coerceIn(30f, 300f)
+            val targetWidthPx = 480f
+            val dpi = (targetWidthPx / (page.mediaBox.width / 72f)).coerceIn(30f, 400f)
             val bitmap = PDFRenderer(doc).renderImageWithDPI(0, dpi)
             val out = ByteArrayOutputStream()
             try {

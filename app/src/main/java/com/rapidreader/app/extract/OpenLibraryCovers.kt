@@ -23,7 +23,10 @@ object OpenLibraryCovers {
     suspend fun findByTitle(title: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
             val coverId = findCoverId(title) ?: return@withContext null
-            download("https://covers.openlibrary.org/b/id/$coverId-M.jpg?default=false")
+            // "L" (large) rather than "M" — the same file backs both the
+            // library-list thumbnail and the tap-to-zoom preview, and "M" is
+            // too soft once blown up to fill most of the screen.
+            download("https://covers.openlibrary.org/b/id/$coverId-L.jpg?default=false")
         } catch (_: Exception) {
             null
         }
