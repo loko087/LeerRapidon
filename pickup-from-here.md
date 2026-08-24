@@ -4,10 +4,13 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
-## Book cover thumbnails (2026-08-24) — built, not yet committed/pushed
+## Book covers, narrow-screen fixes, and a TTS language picker (2026-08-24)
 
-Every imported book now gets a small cover thumbnail on its `LibraryScreen`
-card, tried in this order:
+On [PR #8](https://github.com/loko087/LeerRapidon/pull/8) — **open, not
+yet merged to `main`** as of this writing. Four pieces, in commit order:
+
+**1. Cover thumbnails.** Every imported book gets a small cover on its
+`LibraryScreen` card, tried in this order:
 1. **EPUB**: the cover image declared in the OPF manifest
    (`EpubParser.findCoverHref` in `EpubStructure.kt` — tries EPUB3
    `properties="cover-image"`, then EPUB2 `<meta name="cover">`, then an
@@ -15,35 +18,85 @@ card, tried in this order:
    parsed zip entries in `TextExtractor.extractEpub`.
 2. **PDF**: no embedded "cover" concept, so `TextExtractor.renderCover`
    renders page 1 with `PDFRenderer` (same library already used for OCR)
-   at a DPI computed to land near 300px wide regardless of page size.
+   at a DPI computed to land near a target width regardless of page size.
 3. **Fallback (any source, including plain text/paste)**: a title search
    against the Open Library APIs — `OpenLibraryCovers.kt` hits
    `openlibrary.org/search.json?title=...` for a `cover_i`, then downloads
-   `covers.openlibrary.org/b/id/<id>-M.jpg`. This is the app's **first
+   `covers.openlibrary.org/b/id/<id>-L.jpg`. This is the app's **first
    network call ever** — added `INTERNET` permission. Runs in the
    background *after* the book is already saved (`BookRepository`'s own
    `repoScope`, not tied to any ViewModel), so a slow/absent network never
    blocks the import; the Flow-backed library list just updates in place
    if a match lands. Every failure path (no match, no network, timeout)
    returns null — never fails the import.
+   Covers are normalized to an on-disk JPEG (`saveCover` in
+   `BookRepository.kt`, capped at 480px wide — bigger than the ~44dp list
+   thumbnail needs, but the same file also backs the tap-to-zoom preview
+   below) at `<filesDir>/books/<id>.cover`, tracked via a new
+   `BookEntity.coverPath` column (`AppDatabase` MIGRATION_2_3 — real
+   migration, not destructive). `BookRepository.backfillMissingCovers()`
+   runs once per app session (from `LibraryViewModel.init`) to retroactively
+   fill in covers for books saved before this feature existed, preferring
+   their preserved original file over an Open Library search.
 
-Storage: covers are normalized to a small on-disk JPEG (`saveCover` in
-`BookRepository.kt`, capped at 300px wide) at `<filesDir>/books/<id>.cover`,
-tracked via a new `BookEntity.coverPath` column
-(`AppDatabase` MIGRATION_2_3 — real migration, not destructive).
+**2. Tap-to-zoom cover preview.** Tapping a library card's cover opens it
+centered and enlarged over a dark scrim (`CoverPreviewDialog` in
+`LibraryScreen.kt`, a Compose `Dialog`). Dismiss via the X button, tapping
+the scrim outside the image, or back (the `Dialog`'s own window intercepts
+back for free) — tapping the image itself does nothing, only the
+surrounding scrim dismisses.
 
-**Live-tested on the emulator** (not just compiled): pasted-text import
-("Pride and Prejudice") confirmed the Open Library fallback finds and
-displays a real cover asynchronously after save; a hand-built minimal PDF
-confirmed the first-page-render path shows actual rendered page content
-as the cover. The EPUB embedded-cover path compiled cleanly but wasn't
-live-tested (no test EPUB with a cover on hand) — worth a spot-check with
-a real EPUB before considering that path fully proven.
+**3. Two narrow-screen (360dp) bugs, found by testing at that width (the
+dev emulator defaults to a wider ~360-390dp+ but still needs an explicit
+`adb shell wm size` override to reproduce a truly compact phone) rather
+than just the emulator's default:**
+- The library card's source badge ("EPUB"/"PDF"/"TXT") could wrap
+  vertically into one letter per line once the cover thumbnail left too
+  little row width alongside the pre-existing Original/Delete buttons.
+  Fixed by splitting Original/Delete onto their own row below the
+  cover/title/badge row (same pattern as the existing "Browse" button fix
+  in `ReaderScreen.kt` from PR #5), plus `maxLines`/`softWrap`/`overflow`
+  on the badge text as a second line of defense.
+- The RSVP single-word display clipped long words (e.g. "awareness"
+  losing its last letter): the pre/post pivot-aligned columns in
+  `ReaderScreen.kt` were a hardcoded 100dp regardless of how much wider
+  the display box actually was (typically 130dp+ of unused room). Now
+  sized from the box's real available width via `BoxWithConstraints`, with
+  font-shrink (pre/post together via `rememberFittedWordFontSize`, so the
+  pivot position doesn't jump) as a fallback for the rare word too long
+  even for that. A deliberately pathological 25-letter test word still
+  clips slightly at the 14sp floor — an accepted, appropriately-scoped
+  limit, not something worth chasing further into illegibility.
 
-**Not done / explicitly out of scope this round:** no author-aware search
-(title-only query to Open Library — a generic title could mismatch), no
-manual "search again" / "change cover" affordance if the auto-fetch picks
-a wrong or no cover, no cover preview on the `AddBookScreen` before saving.
+**4. TTS reading-language picker.** `SpeechController` used to set
+`tts.language = Locale.getDefault()` — the *device's* system language, not
+the language of whatever's actually being read. On a phone set to Italian,
+an English book got read with Italian pronunciation. Now defaults to
+English (most likely to match an imported book regardless of device
+language) and exposes `setLanguage()`/`availableLanguages()` for a new
+"Language" row in the reader's Audio mode panel — a dropdown of every
+installed language, shown as autonyms ("Italiano", not a translated name).
+`availableLanguages()` combines `getVoices()` with a probe of common
+languages via `isLanguageAvailable()`, since engines are inconsistent
+about which of the two APIs they actually populate (confirmed on the test
+emulator: `getVoices()` returns empty for a beat after the engine binds,
+before lazily populating). Session-scoped like the existing
+Speed/Words-per-frame/Audio mode settings — **not persisted** across
+reader sessions; ask before changing that if a future request implies it
+should be.
+
+All four live-tested on the emulator (screenshots in the session
+transcript, not reproduced here) — including a real end-to-end language
+switch to Italian and back, and the narrow-screen fixes specifically
+re-tested at a forced 360dp width where the original bugs reproduced.
+**Not tested live:** the EPUB embedded-cover path (no test EPUB with a
+cover on hand) — worth a spot-check with a real EPUB before treating it
+as fully proven.
+
+**Not done / explicitly out of scope:** no author-aware Open Library
+search (title-only query — a generic title could mismatch), no manual
+"search again"/"change cover" affordance, no cover preview on
+`AddBookScreen` before saving, no persistence for the TTS language choice.
 
 ## Where things stand (2026-08-17)
 
