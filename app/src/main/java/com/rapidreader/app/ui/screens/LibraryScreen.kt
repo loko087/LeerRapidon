@@ -1,5 +1,7 @@
 package com.rapidreader.app.ui.screens
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,10 +26,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +48,7 @@ import com.rapidreader.app.theme.PanelColor
 import com.rapidreader.app.theme.PivotColor
 import com.rapidreader.app.theme.TextColor
 import com.rapidreader.app.ui.viewmodel.LibraryViewModel
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -71,6 +78,7 @@ fun LibraryScreen(
                 items(books, key = { it.id }) { book ->
                     BookCard(
                         book,
+                        coverFile = vm.coverFile(book),
                         onClick = { onOpenBook(book.id) },
                         onOpenOriginal = { kind -> onOpenOriginal(book.id, kind) },
                         onDelete = { vm.delete(book.id) }
@@ -90,6 +98,7 @@ fun LibraryScreen(
 @Composable
 private fun BookCard(
     book: BookEntity,
+    coverFile: File?,
     onClick: () -> Unit,
     onOpenOriginal: (OriginalKind) -> Unit,
     onDelete: () -> Unit
@@ -107,6 +116,8 @@ private fun BookCard(
             verticalAlignment = Alignment.Top,
             modifier = Modifier.fillMaxWidth()
         ) {
+            CoverThumbnail(coverFile, Modifier.size(width = 44.dp, height = 64.dp))
+            Spacer(Modifier.width(12.dp))
             // weight(1f) so a long title can never push the actions off the
             // edge of the card \u2014 it wraps/ellipsizes within its own share
             // of the row instead.
@@ -139,6 +150,23 @@ private fun BookCard(
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)).background(LineColor)) {
             Box(Modifier.fillMaxWidth(pct / 100f).fillMaxHeight().background(PivotColor))
+        }
+    }
+}
+
+@Composable
+private fun CoverThumbnail(file: File?, modifier: Modifier = Modifier) {
+    val bitmap = remember(file?.path, file?.lastModified()) {
+        file?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
+    }
+    Box(modifier.clip(RoundedCornerShape(4.dp)).background(BgColor)) {
+        bitmap?.let {
+            Image(
+                bitmap = it,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
         }
     }
 }

@@ -8,7 +8,10 @@ import javax.xml.parsers.DocumentBuilderFactory
 data class EpubStructure(
     val title: String?,
     val opfDir: String,
-    val spinePaths: List<String>
+    val spinePaths: List<String>,
+    // Zip-relative path to the cover image, if the OPF declares one. Null when
+    // the EPUB has no discoverable cover — not an error, just missing metadata.
+    val coverPath: String?
 )
 
 object EpubParser {
@@ -57,7 +60,44 @@ object EpubParser {
             normalizePath(opfDir, Uri.decode(href))
         }
 
-        return EpubStructure(title, opfDir, spinePaths)
+        val coverHref = findCoverHref(opfDoc, manifest)
+        val coverPath = coverHref?.let { normalizePath(opfDir, Uri.decode(it)) }
+
+        return EpubStructure(title, opfDir, spinePaths, coverPath)
+    }
+
+    /** Tries, in order: EPUB3 `properties="cover-image"`, EPUB2
+     *  `<meta name="cover" content="ID"/>`, then an id/filename that just
+     *  looks like a cover. Any of these can be absent — that's normal. */
+    private fun findCoverHref(opfDoc: Document, manifest: Map<String, String>): String? {
+        val items = opfDoc.getElementsByTagName("item")
+
+        for (i in 0 until items.length) {
+            val el = items.item(i)
+            val props = el.attributes.getNamedItem("properties")?.nodeValue ?: continue
+            if (props.split(" ").contains("cover-image")) {
+                return el.attributes.getNamedItem("href")?.nodeValue
+            }
+        }
+
+        val metas = opfDoc.getElementsByTagName("meta")
+        for (i in 0 until metas.length) {
+            val el = metas.item(i)
+            if (el.attributes.getNamedItem("name")?.nodeValue == "cover") {
+                val id = el.attributes.getNamedItem("content")?.nodeValue
+                manifest[id]?.let { return it }
+            }
+        }
+
+        for (i in 0 until items.length) {
+            val el = items.item(i)
+            val id = el.attributes.getNamedItem("id")?.nodeValue ?: continue
+            val mediaType = el.attributes.getNamedItem("media-type")?.nodeValue ?: ""
+            if (id.contains("cover", ignoreCase = true) && mediaType.startsWith("image/")) {
+                return el.attributes.getNamedItem("href")?.nodeValue
+            }
+        }
+        return null
     }
 
     /** Resolves [href] against [opfDir], collapsing "." / ".." segments so the

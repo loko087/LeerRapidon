@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Used only to look up a book cover on Open Library when one can't be
+         pulled from the file itself (embedded EPUB cover, or a rendered PDF
+         first page). The rest of the app stays fully offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:largeHeap="true"
         android:allowBackup="true"

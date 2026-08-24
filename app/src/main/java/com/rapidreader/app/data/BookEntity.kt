@@ -20,7 +20,11 @@ data class BookEntity(
     // Last position in original-form mode: PDF page index, or EPUB spine index.
     // Null = never opened in that mode. Deliberately separate from `idx`, which
     // is the RSVP word index.
-    val originalPos: Int? = null
+    val originalPos: Int? = null,
+    // Name (relative to <filesDir>/books) of the cover thumbnail: "<id>.cover".
+    // Null until a cover is found — from the EPUB itself, a rendered PDF first
+    // page, or (set later, asynchronously) an Open Library title search.
+    val coverPath: String? = null
 )
 
 enum class OriginalKind { PDF, EPUB }

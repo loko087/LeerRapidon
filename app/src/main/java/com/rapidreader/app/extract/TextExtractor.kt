@@ -1,6 +1,7 @@
 package com.rapidreader.app.extract
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.google.android.gms.tasks.Tasks
@@ -17,7 +18,15 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
 
-data class ExtractResult(val text: String, val title: String, val source: String)
+data class ExtractResult(
+    val text: String,
+    val title: String,
+    val source: String,
+    // Cover art pulled straight from the file: an EPUB's declared cover
+    // image, or a render of a PDF's first page. Null when the file has
+    // neither — the caller falls back to an Open Library title search.
+    val cover: ByteArray? = null
+)
 
 object TextExtractor {
 
@@ -75,12 +84,13 @@ object TextExtractor {
             ?: throw IllegalStateException("Couldn't open file")
         val memSetting = MemoryUsageSetting.setupTempFileOnly().setTempDir(context.cacheDir)
 
-        val (text, usedOcr) = try {
+        val (text, usedOcr, cover) = try {
             input.use { stream ->
                 PDDocument.load(stream, memSetting).use { doc ->
                     val layerText = PDFTextStripper().getText(doc)
-                    if (layerText.isNotBlank()) layerText to false
-                    else ocrPdf(context, doc, onProgress) to true
+                    val cover = renderCover(doc)
+                    if (layerText.isNotBlank()) Triple(layerText, false, cover)
+                    else Triple(ocrPdf(context, doc, onProgress), true, cover)
                 }
             }
         } catch (oom: OutOfMemoryError) {
@@ -92,7 +102,30 @@ object TextExtractor {
                 "No text found — this looks like a blank or too low-quality scan for OCR to read"
             )
         }
-        return ExtractResult(text, baseTitle(fileName), if (usedOcr) "pdf-ocr" else "pdf")
+        return ExtractResult(text, baseTitle(fileName), if (usedOcr) "pdf-ocr" else "pdf", cover)
+    }
+
+    // Renders the first page as a cover thumbnail — a PDF has no embedded
+    // "cover" concept, but the first page is almost always it. Sized in DPI
+    // (not a fixed pixel scale) so odd page dimensions still land near the
+    // target width. Never lets a render failure fail the whole import.
+    private fun renderCover(doc: PDDocument): ByteArray? {
+        if (doc.numberOfPages == 0) return null
+        return try {
+            val page = doc.getPage(0)
+            val targetWidthPx = 300f
+            val dpi = (targetWidthPx / (page.mediaBox.width / 72f)).coerceIn(30f, 300f)
+            val bitmap = PDFRenderer(doc).renderImageWithDPI(0, dpi)
+            val out = ByteArrayOutputStream()
+            try {
+                bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            } finally {
+                bitmap.recycle()
+            }
+            out.toByteArray()
+        } catch (_: Exception) {
+            null
+        }
     }
 
     // No text layer — fall back to on-device OCR, rendering each page to a
@@ -162,7 +195,8 @@ object TextExtractor {
         }
         val text = sb.toString()
         if (text.isBlank()) throw IllegalStateException("No readable text found in this EPUB")
-        return ExtractResult(text, structure.title ?: baseTitle(fileName), "epub")
+        val cover = structure.coverPath?.let { entries[it] }
+        return ExtractResult(text, structure.title ?: baseTitle(fileName), "epub", cover)
     }
 
     // Regex-based tag stripping tolerates the imperfect/near-XHTML markup real

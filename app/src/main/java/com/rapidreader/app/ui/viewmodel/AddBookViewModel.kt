@@ -23,7 +23,8 @@ sealed class AddState {
         val source: String,
         val wordCount: Int,
         val original: StagedOriginal? = null,
-        val originalNote: String? = null
+        val originalNote: String? = null,
+        val cover: ByteArray? = null
     ) : AddState()
 }
 
@@ -59,7 +60,7 @@ class AddBookViewModel(app: Application) : AndroidViewModel(app) {
                 val words = RsvpEngine.tokenize(result.text)
                 if (words.isEmpty()) throw IllegalStateException("No text could be extracted from this file.")
                 _state.value = AddState.Ready(
-                    result.text, result.title, result.source, words.size, staged, originalNote
+                    result.text, result.title, result.source, words.size, staged, originalNote, result.cover
                 )
             } catch (e: Exception) {
                 repo.clearStagedOriginal()
@@ -77,7 +78,7 @@ class AddBookViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun save(title: String): String {
         val s = _state.value
         check(s is AddState.Ready) { "Nothing ready to save" }
-        return repo.addBook(title.ifBlank { s.title }, s.source, s.text, s.wordCount, s.original)
+        return repo.addBook(title.ifBlank { s.title }, s.source, s.text, s.wordCount, s.original, s.cover)
     }
 
     private fun querySize(uri: Uri): Long? {

@@ -23,6 +23,11 @@ interface BookDao {
     @Query("UPDATE books SET originalPos = :pos, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateOriginalPos(id: String, pos: Int, updatedAt: Long)
 
+    // Deliberately doesn't touch updatedAt — a background cover fetch landing
+    // shouldn't reorder the library list out from under the user.
+    @Query("UPDATE books SET coverPath = :coverPath WHERE id = :id")
+    suspend fun updateCover(id: String, coverPath: String?)
+
     @Query("DELETE FROM books WHERE id = :id")
     suspend fun delete(id: String)
 }

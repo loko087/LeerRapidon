@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = BookRepository(app)
@@ -19,4 +20,6 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(id: String) {
         viewModelScope.launch { repo.deleteBook(id) }
     }
+
+    fun coverFile(book: BookEntity): File? = repo.resolveCover(book.coverPath)
 }

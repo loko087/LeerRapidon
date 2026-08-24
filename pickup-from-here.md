@@ -4,6 +4,47 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
+## Book cover thumbnails (2026-08-24) — built, not yet committed/pushed
+
+Every imported book now gets a small cover thumbnail on its `LibraryScreen`
+card, tried in this order:
+1. **EPUB**: the cover image declared in the OPF manifest
+   (`EpubParser.findCoverHref` in `EpubStructure.kt` — tries EPUB3
+   `properties="cover-image"`, then EPUB2 `<meta name="cover">`, then an
+   id/filename that looks like a cover). Pulled straight from the already-
+   parsed zip entries in `TextExtractor.extractEpub`.
+2. **PDF**: no embedded "cover" concept, so `TextExtractor.renderCover`
+   renders page 1 with `PDFRenderer` (same library already used for OCR)
+   at a DPI computed to land near 300px wide regardless of page size.
+3. **Fallback (any source, including plain text/paste)**: a title search
+   against the Open Library APIs — `OpenLibraryCovers.kt` hits
+   `openlibrary.org/search.json?title=...` for a `cover_i`, then downloads
+   `covers.openlibrary.org/b/id/<id>-M.jpg`. This is the app's **first
+   network call ever** — added `INTERNET` permission. Runs in the
+   background *after* the book is already saved (`BookRepository`'s own
+   `repoScope`, not tied to any ViewModel), so a slow/absent network never
+   blocks the import; the Flow-backed library list just updates in place
+   if a match lands. Every failure path (no match, no network, timeout)
+   returns null — never fails the import.
+
+Storage: covers are normalized to a small on-disk JPEG (`saveCover` in
+`BookRepository.kt`, capped at 300px wide) at `<filesDir>/books/<id>.cover`,
+tracked via a new `BookEntity.coverPath` column
+(`AppDatabase` MIGRATION_2_3 — real migration, not destructive).
+
+**Live-tested on the emulator** (not just compiled): pasted-text import
+("Pride and Prejudice") confirmed the Open Library fallback finds and
+displays a real cover asynchronously after save; a hand-built minimal PDF
+confirmed the first-page-render path shows actual rendered page content
+as the cover. The EPUB embedded-cover path compiled cleanly but wasn't
+live-tested (no test EPUB with a cover on hand) — worth a spot-check with
+a real EPUB before considering that path fully proven.
+
+**Not done / explicitly out of scope this round:** no author-aware search
+(title-only query to Open Library — a generic title could mismatch), no
+manual "search again" / "change cover" affordance if the auto-fetch picks
+a wrong or no cover, no cover preview on the `AddBookScreen` before saving.
+
 ## Where things stand (2026-08-17)
 
 All of the below is **merged into `main`** as of this writing (PRs #1–#5)
