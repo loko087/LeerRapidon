@@ -143,5 +143,6 @@ a backend to defend it would cost more than the leakage.
 
 Icon, feature graphic and four screenshots are in `docs/store/`, and the
 listing copy and every App-content answer are in
-[docs/play-store-listing.md](docs/play-store-listing.md). Still to decide
-there: the price of the premium product.
+[docs/play-store-listing.md](docs/play-store-listing.md), including the
+`premium_unlock` price (USD 0.99 base). Nothing there is still undecided —
+what remains is creating the product in the Console.

@@ -166,7 +166,12 @@ price and the upsell shows no buy button.
 | Type | One-time, **Managed product** (not a subscription, not consumable) |
 | Name | Leer Rapidon Premium |
 | Description | Unlocks audio mode and the original-form reader, forever. One payment, no subscription. |
-| Price | ⬜ **still to decide** |
+| Price | **USD 0.99** — set as the base price; Play converts it per market, and you can review the per-country table before publishing |
+
+The app never hardcodes the price — it displays whatever
+`formattedPrice` the store returns for the buyer's own currency, so changing
+the price later is a Console change with no release needed. Before the
+product exists the store returns nothing and the upsell hides its buy button.
 
 ### What the purchase unlocks
 
