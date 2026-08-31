@@ -68,7 +68,7 @@ fun LibraryScreen(
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text(
-            "RAPID READER",
+            "LEER RAPIDON",
             color = DimColor, fontSize = 13.sp, fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(bottom = 20.dp)
         )

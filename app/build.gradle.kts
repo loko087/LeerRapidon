@@ -1,20 +1,52 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
 
+// Release signing material never lives in the repo. Local builds read
+// keystore.properties (gitignored — see keystore.properties.example); CI reads
+// the same four values from the environment. When neither is present the
+// release build is left unsigned rather than failing, so `assembleRelease`
+// still works on a clean clone.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingValue(key: String, env: String): String? =
+    keystoreProps.getProperty(key) ?: System.getenv(env)
+
+val releaseStorePath = signingValue("storeFile", "RELEASE_STORE_FILE")
+val releaseStoreFile = releaseStorePath?.let { rootProject.file(it) }?.takeIf { it.exists() }
+
 android {
     namespace = "com.rapidreader.app"
-    compileSdk = 34
-    buildToolsVersion = "35.0.1"
+    // Play requires new uploads to target a recent API level (36 as of the
+    // Aug 2026 deadline), so compile and target move together here.
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.rapidreader.app"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
+        // Bump versionCode on EVERY upload — Play rejects a reused one, and it
+        // must keep rising across both the GitHub APK and the Play bundle.
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = signingValue("storePassword", "RELEASE_STORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "RELEASE_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "RELEASE_KEY_PASSWORD")
+            }
+        }
     }
 
     buildFeatures { compose = true }
@@ -28,7 +60,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // The bundled ML Kit OCR model and PdfBox make for a large
+            // binary; R8 plus resource shrinking is worth the keep rules.
+            // See app/proguard-rules.pro for what has to survive.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 

@@ -1,7 +1,9 @@
 <resources>
+    <!-- System bar colours are set at runtime by enableEdgeToEdge() in
+         MainActivity; android:statusBarColor/navigationBarColor are no-ops
+         from API 35 on, so they are deliberately not declared here.
+         windowBackground stays to avoid a light flash before first frame. -->
     <style name="Theme.RapidReader" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF0F1216</item>
         <item name="android:windowBackground">#FF0F1216</item>
-        <item name="android:navigationBarColor">#FF0F1216</item>
     </style>
 </resources>
