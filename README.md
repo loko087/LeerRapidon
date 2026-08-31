@@ -1,4 +1,4 @@
-# Rapid Reader (Native Android)
+# Leer Rapidon (Native Android)
 
 RSVP speed-reading app with a book library, PDF/EPUB import, and native
 text-to-speech, built with Kotlin + Jetpack Compose. Fully offline —

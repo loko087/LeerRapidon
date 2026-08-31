@@ -18,7 +18,7 @@ import java.net.URLEncoder
  */
 object OpenLibraryCovers {
     private const val TIMEOUT_MS = 8000
-    private const val USER_AGENT = "RapidReader/1.0 (Android; +https://github.com)"
+    private const val USER_AGENT = "LeerRapidon/1.0 (Android; +https://github.com/loko087/LeerRapidon)"
 
     suspend fun findByTitle(title: String): ByteArray? = withContext(Dispatchers.IO) {
         try {

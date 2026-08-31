@@ -1,0 +1,8 @@
+# GitHub Pages config. Serving from the /docs folder on main renders the
+# privacy policy Play requires at https://loko087.github.io/LeerRapidon/privacy-policy
+title: Leer Rapidon
+description: RSVP speed-reading for your own PDFs and EPUBs.
+theme: jekyll-theme-minimal
+exclude:
+  - play-store-listing.md   # internal notes, not for publication
+  - store
