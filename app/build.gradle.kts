@@ -21,6 +21,20 @@ fun signingValue(key: String, env: String): String? =
 val releaseStorePath = signingValue("storeFile", "RELEASE_STORE_FILE")
 val releaseStoreFile = releaseStorePath?.let { rootProject.file(it) }?.takeIf { it.exists() }
 
+// Locally an unsigned release build is a convenience; in CI it is a silent
+// failure — a missing secret makes `base64 -d` write an empty keystore and the
+// build then produces unsigned artifacts that Play rejects hours later. Fail
+// at configuration time instead, but only when a release task was actually
+// asked for, so debug builds and PR checks still run without secrets.
+val buildingRelease = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+if (System.getenv("CI") != null && buildingRelease && releaseStoreFile == null) {
+    throw GradleException(
+        "Release build in CI has no signing config. Check the RELEASE_STORE_FILE, " +
+            "RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS and RELEASE_KEY_PASSWORD " +
+            "secrets — an unsigned build would upload and then be rejected."
+    )
+}
+
 android {
     namespace = "com.rapidreader.app"
     // Play requires new uploads to target a recent API level (36 as of the
@@ -36,6 +50,23 @@ android {
         // must keep rising across both the GitHub APK and the Play bundle.
         versionCode = 1
         versionName = "1.0.0"
+    }
+
+    // The sideloaded build cannot use Play Billing at all, so the two
+    // distributions are separate flavours rather than one binary with a
+    // runtime switch: `github` links no billing code and unlocks everything,
+    // `play` is free with audio mode and the original-form reader behind a
+    // one-time purchase. Each supplies its own PremiumProvider from
+    // src/<flavour>/java.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") {
+            dimension = "distribution"
+        }
+        create("github") {
+            dimension = "distribution"
+            versionNameSuffix = "-github"
+        }
     }
 
     signingConfigs {
@@ -101,6 +132,10 @@ dependencies {
 
     // PDF text extraction (pure-Kotlin/Java port of Apache PDFBox for Android)
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
+    // Play Billing, and therefore the paywall, exists only in the `play`
+    // flavour — the sideloaded build has nothing to sell and must not link it.
+    "playImplementation"("com.android.billingclient:billing:9.1.0")
 
     // OCR fallback for scanned PDFs with no text layer. Bundled (not Play
     // Services-downloaded) model, so it works fully offline like the rest of the app.

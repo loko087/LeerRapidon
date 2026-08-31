@@ -12,13 +12,23 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import com.rapidreader.app.navigation.AppNavHost
+import com.rapidreader.app.premium.LocalPremium
+import com.rapidreader.app.premium.PremiumProvider
+import com.rapidreader.app.premium.PremiumSource
 import com.rapidreader.app.theme.BgColor
 import com.rapidreader.app.theme.RapidReaderTheme
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 
 class MainActivity : ComponentActivity() {
+
+    // Which implementation this is depends on the flavour: Play Billing in
+    // `play`, a constant `true` in `github`. Held by the Activity so the
+    // billing connection outlives recomposition.
+    private lateinit var premium: PremiumSource
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // From targetSdk 35 the system draws us edge-to-edge whether we ask or
         // not, and android:statusBarColor/navigationBarColor stop having any
@@ -31,17 +41,28 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         PDFBoxResourceLoader.init(applicationContext)
+        premium = PremiumProvider.create(this)
         setContent {
-            RapidReaderTheme {
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(BgColor)
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                ) {
-                    AppNavHost()
+            CompositionLocalProvider(LocalPremium provides premium) {
+                RapidReaderTheme {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(BgColor)
+                            .windowInsetsPadding(WindowInsets.safeDrawing)
+                    ) {
+                        AppNavHost()
+                    }
                 }
             }
         }
+    }
+
+    // A purchase can complete outside this process — restored on a new device,
+    // or bought on the web — so re-check on the way back to the foreground
+    // rather than trusting the value cached at startup.
+    override fun onResume() {
+        super.onResume()
+        premium.refresh()
     }
 }

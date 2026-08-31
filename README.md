@@ -67,6 +67,27 @@ no network permission is requested.
   separately from the fast reader's word-index progress, since the two
   don't map onto each other.
 
+## Two builds
+
+One codebase, two distributions, split by product flavour:
+
+- **`github`** — the APK on the Releases page. Everything unlocked, no
+  billing code linked at all.
+- **`play`** — the Play Store build. Free to use, with **audio mode** and the
+  **original-form reader** behind a single one-time purchase. Everything else
+  (speed reader, library, import, OCR, browse view) is free, and neither build
+  has ads.
+
+The split is a flavour rather than a runtime switch because Play Billing only
+works for apps the Play Store installed — a sideloaded build cannot use it,
+and that distribution is aimed at people who would rather not use the Store.
+Each flavour supplies its own `PremiumProvider` from `app/src/<flavour>/java`.
+
+```
+./gradlew assembleGithubRelease   # unlocked APK
+./gradlew bundlePlayRelease       # Play bundle
+```
+
 ## Known limitations
 
 - **Scanned PDFs** are read via on-device OCR when there's no embedded

@@ -67,9 +67,11 @@ lookup by book title when a cover cannot be pulled from the file itself.
 
 PREMIUM
 
-Leer Rapidon is free to use. A single one-time purchase unlocks the
-premium features — no subscription, no recurring charge, and it stays
-unlocked on any device signed in to the same Google account.
+Leer Rapidon is free to use. The speed reader, the library, the browse
+view and PDF/EPUB import are all free, with no ads and no time limit. A
+single one-time purchase unlocks audio mode and the original-form reader —
+no subscription, no recurring charge, and it stays unlocked on any device
+signed in to the same Google account.
 
 Leer Rapidon reads the files you give it. It is not a store and does not
 sell, supply, or link to any books.
@@ -154,15 +156,36 @@ describes the request in full.
 
 ## Premium in-app product
 
-Create under **Monetise → Products → In-app products**.
+Create under **Monetise → Products → In-app products**. The app already
+queries and purchases this ID; until the product exists the store returns no
+price and the upsell shows no buy button.
 
 | Field | Value |
 |---|---|
-| Product ID | `premium_unlock` (permanent — cannot be reused or renamed) |
+| Product ID | `premium_unlock` (must match the app exactly; permanent once created) |
 | Type | One-time, **Managed product** (not a subscription, not consumable) |
 | Name | Leer Rapidon Premium |
-| Description | Unlocks all premium features, forever. One payment, no subscription. |
-| Price | ⬜ to decide |
+| Description | Unlocks audio mode and the original-form reader, forever. One payment, no subscription. |
+| Price | ⬜ **still to decide** |
 
-Not yet implemented in the app — the code has no billing integration at
-all. See RELEASING.md for what that work involves.
+### What the purchase unlocks
+
+| Feature | Free | Premium |
+|---|---|---|
+| RSVP speed reader, speed and words-per-frame | ✅ | ✅ |
+| Library, PDF/EPUB/text import, OCR for scanned PDFs | ✅ | ✅ |
+| Browse full-text view | ✅ | ✅ |
+| **Audio mode** (text-to-speech with word sync) | — | ✅ |
+| **Original view** (page-faithful PDF / EPUB) | — | ✅ |
+
+The sideloaded GitHub APK is a separate `github` flavour with everything
+unlocked and no billing code linked at all. That is deliberate: Play Billing
+only works for apps installed by the Play Store, and that distribution exists
+for people who would rather not use the Store. The PolyForm Noncommercial
+licence stops anyone reselling either build.
+
+### Before you can test a purchase
+
+Add licence testers under **Setup → Licence testing**, then upload a build to
+internal testing. The purchase flow cannot be exercised from a locally-built
+APK — Play only serves billing to apps it installed itself.
