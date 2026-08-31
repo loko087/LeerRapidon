@@ -43,8 +43,8 @@ jobs:
         run: |
           mkdir -p dist
           NAME="${GITHUB_REF_NAME}"
-          cp app/build/outputs/apk/release/app-release.apk "dist/RapidReader-${NAME}.apk"
-          cp app/build/outputs/bundle/release/app-release.aab "dist/RapidReader-${NAME}.aab"
+          cp app/build/outputs/apk/release/app-release.apk "dist/LeerRapidon-${NAME}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/LeerRapidon-${NAME}.aab"
 
       # The .aab is deliberately NOT attached to the public release — it is
       # only useful to Play, and uploading it is a manual Console step. Kept
