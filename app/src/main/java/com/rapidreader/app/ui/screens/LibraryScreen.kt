@@ -46,6 +46,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rapidreader.app.data.BookEntity
 import com.rapidreader.app.data.OriginalKind
 import com.rapidreader.app.data.originalKind
+import com.rapidreader.app.premium.PremiumFeature
+import com.rapidreader.app.premium.premiumLabel
+import com.rapidreader.app.premium.rememberPremiumAction
 import com.rapidreader.app.theme.BgColor
 import com.rapidreader.app.theme.DimColor
 import com.rapidreader.app.theme.LineColor
@@ -176,7 +179,8 @@ private fun BookCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             book.originalKind()?.let { kind ->
-                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+                val openOriginal = rememberPremiumAction(PremiumFeature.ORIGINAL_VIEW) { onOpenOriginal(kind) }
+                TextButton(onClick = openOriginal) { Text(premiumLabel("Original"), color = DimColor) }
             }
             TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
         }

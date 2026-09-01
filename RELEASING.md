@@ -85,41 +85,64 @@ debug key:
 apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android   --ks-key-alias androiddebugkey --key-pass pass:android app-release-unsigned.apk
 ```
 
+### The two flavours
+
+There is one codebase and two distributions, split by product flavour
+because a sideloaded build cannot use Play Billing at all:
+
+| Flavour | Goes to | Premium features |
+|---|---|---|
+| `github` | the APK on the Releases page | unlocked, no billing code linked |
+| `play` | the AAB in the Play Console | behind the one-time purchase |
+
+Audio mode and the original-form reader are what the purchase unlocks. Each
+flavour supplies its own `PremiumProvider` from `app/src/<flavour>/java`.
+
 ### Building locally instead
 
 ```
-./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
-./gradlew bundleRelease     # app/build/outputs/bundle/release/app-release.aab
+./gradlew assembleGithubRelease   # app/build/outputs/apk/github/release/app-github-release.apk
+./gradlew bundlePlayRelease       # app/build/outputs/bundle/playRelease/app-play-release.aab
 ```
 
 With no `keystore.properties` present, both still build but come out
-**unsigned** — that is deliberate so a clean clone works, but check the
-build log before shipping anything.
+**unsigned** — deliberate, so a clean clone works. In CI that would be a
+silent disaster instead of a convenience, so a release build there fails
+outright when the signing secrets are missing rather than quietly producing
+an unsigned artifact Play will reject hours later.
 
 ---
 
 ## Still outstanding
 
-### Premium unlock (not built)
+### Premium unlock — built, not yet sellable
 
-The app currently has no billing code at all — free and premium are
-identical. Shipping the one-time unlock needs:
+The billing integration is done: `premium_unlock` is queried and purchased
+through Play Billing, purchases are acknowledged (Play auto-refunds anything
+left unacknowledged for three days), and entitlement is restored on reinstall
+by querying existing purchases. Entitlement is cached to disk so a paying
+user is not shown a paywall when the app is offline — which, for an app that
+otherwise never touches the network, is the normal case rather than the edge
+case.
 
-- `com.android.billingclient:billing-ktx`, and a `premium_unlock` managed
-  product created in the Console.
-- Purchase **acknowledgement within 3 days** — Play auto-refunds anything
-  unacknowledged, so this is not optional.
-- Restore-on-reinstall by querying existing purchases at launch.
-- A decision on **which features sit behind the wall.** Nothing is gated
-  today, and this is a product call, not a technical one.
-- A story for the GitHub APK, which cannot use Play billing at all: either
-  it stays permanently free-tier, or it ships as a separate build flavour
-  with everything unlocked. The PolyForm Noncommercial licence already
-  stops anyone reselling either one.
+What is still missing is on the Play Console side:
+
+- **Create the `premium_unlock` managed product** and set a price. Until it
+  exists, the store returns no price and the upsell dialog deliberately shows
+  no buy button rather than a button that cannot work.
+- **Add licence testers** (Console → Setup → Licence testing) so you can run
+  the purchase flow end to end without being charged. The purchase flow
+  cannot be tested from a locally-built APK at all — it needs a build
+  installed by Play, so upload to internal testing first.
+
+There is no server-side receipt verification, because there is no server.
+For a single cheap one-time product on an otherwise offline app, standing up
+a backend to defend it would cost more than the leakage.
 
 ### Store listing assets
 
 Icon, feature graphic and four screenshots are in `docs/store/`, and the
 listing copy and every App-content answer are in
-[docs/play-store-listing.md](docs/play-store-listing.md). Still to decide
-there: the price of the premium product.
+[docs/play-store-listing.md](docs/play-store-listing.md), including the
+`premium_unlock` price (USD 0.99 base). Nothing there is still undecided —
+what remains is creating the product in the Console.

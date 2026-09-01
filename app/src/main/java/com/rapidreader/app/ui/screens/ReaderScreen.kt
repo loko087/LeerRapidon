@@ -55,6 +55,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rapidreader.app.data.OriginalKind
+import com.rapidreader.app.premium.LocalPremium
+import com.rapidreader.app.premium.PremiumFeature
+import com.rapidreader.app.premium.premiumLabel
+import com.rapidreader.app.premium.rememberPremiumAction
 import com.rapidreader.app.rsvp.RsvpEngine
 import com.rapidreader.app.theme.DimColor
 import com.rapidreader.app.theme.LineColor
@@ -130,7 +134,8 @@ fun ReaderScreen(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onBrowseText) { Text("Browse", color = DimColor) }
             ui.originalKind?.let { kind ->
-                TextButton(onClick = { onOpenOriginal(kind) }) { Text("Original", color = DimColor) }
+                val openOriginal = rememberPremiumAction(PremiumFeature.ORIGINAL_VIEW) { onOpenOriginal(kind) }
+                TextButton(onClick = openOriginal) { Text(premiumLabel("Original"), color = DimColor) }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -235,11 +240,21 @@ fun ReaderScreen(
                 colors = SliderDefaults.colors(thumbColor = PivotColor, activeTrackColor = PivotColor, inactiveTrackColor = LineColor)
             )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                // While locked the checkbox opens the upsell instead of toggling,
+                // so the control never silently does nothing when tapped.
+                val entitled by LocalPremium.current.isPremium.collectAsState()
+                val toggleAudio = rememberPremiumAction(PremiumFeature.AUDIO_MODE) {
+                    vm.setAudioMode(!ui.audioMode)
+                }
                 Checkbox(
-                    checked = ui.audioMode, onCheckedChange = { vm.setAudioMode(it) },
+                    checked = ui.audioMode, onCheckedChange = { toggleAudio() },
                     colors = CheckboxDefaults.colors(checkedColor = PivotColor)
                 )
-                Text("Audio mode \u2014 voice reads aloud, words follow speech", color = TextColor, fontSize = 13.sp)
+                Text(
+                    if (entitled) "Audio mode \u2014 voice reads aloud, words follow speech"
+                    else "Audio mode \u2014 Premium",
+                    color = TextColor, fontSize = 13.sp
+                )
             }
             if (ui.audioMode) {
                 LanguagePicker(
