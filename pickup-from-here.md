@@ -6,8 +6,8 @@ that should survive a machine switch belongs here instead.
 
 ## Backup and restore, and the main-thread parse fix (2026-09-09)
 
-On branch `claude/library-backup` (commit `d150328`) — **not merged and not
-pushed** as of this writing.
+[PR #12](https://github.com/loko087/LeerRapidon/pull/12), **merged to `main`**
+(2026-09-09).
 
 **Backup is a snapshot; restore replaces.** `LibraryBackup` writes the whole
 library to one `.zip` placed through the system picker, so it can land
