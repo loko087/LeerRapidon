@@ -4,6 +4,90 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
+## Backup and restore, and the main-thread parse fix (2026-09-09)
+
+On branch `claude/library-backup` (commit `d150328`) — **not merged and not
+pushed** as of this writing.
+
+**Backup is a snapshot; restore replaces.** `LibraryBackup` writes the whole
+library to one `.zip` placed through the system picker, so it can land
+straight in Dropbox or Drive when those apps are installed. Restoring makes
+the library match the archive — books it does not contain are removed. The
+single exception is reading position: a book present in both keeps whichever
+point is further along, because that is the only thing in the library that
+cannot be recovered from anywhere else. Zip layout, which `LibraryManifest`
+also defines for the undo snapshot:
+
+```
+library.json          format, createdAt, every row
+books/<id>.txt        extracted text
+books/<id>.cover      cover thumbnail
+books/<id>.pdf        preserved original
+books/<id>_epub/...   preserved original, as the unzipped tree it is stored as
+```
+
+**Undo.** Before a restore writes anything the current rows go to
+`<filesDir>/undo/library.json`, and the files of books about to be removed
+are **moved** (not copied) into `<filesDir>/undo/files/` — so the safety net
+costs no extra space, it only defers the deletion. Undo sits next to "Done"
+after a restore and, because the stash outlives that message, as "Undo last
+restore" in the dialog until the next restore replaces it. One level, no redo.
+
+**Auto Backup rules** — `res/xml/backup_rules.xml` (API 26–30) and
+`data_extraction_rules.xml` (31+). `allowBackup` was already true, but Auto
+Backup has a per-app quota that a single preserved original can exceed, and
+exceeding it fails the *entire* backup silently — so it was protecting
+nothing. Cloud backup now carries only the Room database; device-to-device
+transfer has no such quota and still takes everything. Worth knowing: this
+also makes the README's and the Play listing's "your books never leave the
+device" substantially true for cloud backup, where before it was not.
+
+**A missing text file no longer looks like a bug.** `getBookText` answers
+null rather than `""`, and both reading screens show `MissingText.kt` instead
+of a real-looking book with zero words and a dead slider. Those same paths
+also used to bail out without clearing `loading` when the row itself was
+gone, spinning a progress indicator forever.
+
+**A user-chosen library folder was built and then removed — don't rebuild it
+without asking.** It mirrored the library into a SAF tree so a sync tool
+could carry it between devices, and it worked, but it needs merge semantics,
+deletion tombstones and a background push; the call was that a backup is a
+snapshot and that is enough. Two facts from it worth keeping if it ever comes
+back: the Room database **cannot** live in a tree URI (SQLite needs a real
+filesystem path), and document providers rename any file whose extension does
+not match the MIME type it was created with, so that layout has to be flat
+with matching extensions.
+
+### Found while reviewing the whole app, not fixed
+
+- **No tests at all.** `RsvpEngine.tokenize/paragraphs/orpIndex/wordDelayMs`,
+  `EpubParser.normalizePath` and `SpeechController.chunkText` are pure
+  functions with no Android dependencies — plain JVM tests, no emulator.
+  `paragraphs()`'s invariant (same word order and count as `tokenize()`,
+  which is what makes Browse's tap-to-jump indices valid) is asserted only in
+  a comment.
+- `ReaderViewModel.speakFromIdx`'s `onRangeStart` walks `offs` from index 0
+  on every TTS word boundary. It is sorted; it wants a binary search. Late in
+  a 130k-word book that is ~130k iterations several times a second.
+- `ReaderScreen`'s speed slider calls `setWpm` on every drag pixel; in audio
+  mode each call re-substrings the remaining book and restarts TTS.
+  `onValueChangeFinished` is the fix.
+- `LibraryScreen` decodes cover JPEGs with `BitmapFactory.decodeFile` during
+  composition, on the main thread, for every visible card.
+- `CoverPreviewDialog` calls `onDismiss()` from the composition body when a
+  decode returns null — state mutation during composition.
+- Deleting a book is one unguarded tap: no confirmation, no undo, and it
+  takes the text, cover, original and progress with it.
+- `AddBookScreen`'s save has no error path — an IOException out of
+  `repo.addBook` escapes `rememberCoroutineScope` and crashes instead of
+  using the error card the screen already has.
+- `TextExtractor.extractEpub` reads every zip entry into memory with no cap,
+  while `OriginalStore.stageEpub` caps both entry count and uncompressed size
+  for the same untrusted file.
+- `versionCode` is still hardcoded to 1 and CI does not check it, so a second
+  tagged release would be rejected by Play. The signing config already fails
+  fast in CI for exactly this class of problem.
+
 ## Release infrastructure and the premium unlock (2026-09-08)
 
 [PR #9](https://github.com/loko087/LeerRapidon/pull/9) and
@@ -43,9 +127,9 @@ people who would rather not use the Store. Build with `assembleGithubRelease`
   `Scaffold`; insets are applied once around the nav host in `MainActivity`.
   New screens need nothing, but a screen that genuinely wants to draw under
   the system bars has to opt out there rather than locally.
-- **Browse is slow to open on a long book.** On a 130k-word EPUB it takes
-  well over a second and sometimes several. Not measured properly and not
-  investigated — if `BrowseTextScreen` work comes up, look here first.
+- ~~**Browse is slow to open on a long book.**~~ Measured and fixed on
+  2026-09-09 — see the section above. It was the text parse running on the
+  main thread, in both reading screens.
 
 **Store assets and copy are in the repo**: `docs/store/` (512 icon, feature
 graphic, four screenshots), `docs/privacy-policy.md`, and
