@@ -1,6 +1,9 @@
 package com.rapidreader.app.ui.screens
 
 import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,14 +20,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +63,7 @@ import com.rapidreader.app.theme.LineColor
 import com.rapidreader.app.theme.PanelColor
 import com.rapidreader.app.theme.PivotColor
 import com.rapidreader.app.theme.TextColor
+import com.rapidreader.app.ui.viewmodel.BackupState
 import com.rapidreader.app.ui.viewmodel.LibraryViewModel
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -68,13 +77,35 @@ fun LibraryScreen(
 ) {
     val books by vm.books.collectAsState()
     var expandedCover by remember { mutableStateOf<File?>(null) }
+    val backupState by vm.backup.collectAsState()
+    val canUndo by vm.canUndo.collectAsState()
+    var showBackup by remember { mutableStateOf(false) }
+    // Re-checked on open: the snapshot outlives the result message, so undo
+    // stays reachable after "Done" is tapped, until the next restore replaces it.
+    LaunchedEffect(showBackup) { if (showBackup) vm.refreshUndo() }
+
+    // The system picker owns the destination, so the app never needs storage
+    // permission and the backup can land anywhere the user can reach - including
+    // Dropbox or Drive when those apps expose a document provider.
+    val createBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri -> if (uri != null) vm.backupTo(uri) else vm.dismissBackup() }
+    val openBackup = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) vm.previewRestore(uri) else vm.dismissBackup() }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(
-            "LEER RAPIDON",
-            color = DimColor, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(bottom = 20.dp)
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "LEER RAPIDON",
+                color = DimColor, fontSize = 13.sp, fontWeight = FontWeight.Medium
+            )
+            TextButton(onClick = { showBackup = true }) { Text("Backup", color = DimColor) }
+        }
         if (books.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
@@ -107,6 +138,106 @@ fun LibraryScreen(
     expandedCover?.let { file ->
         CoverPreviewDialog(file, onDismiss = { expandedCover = null })
     }
+
+    if (showBackup) {
+        BackupDialog(
+            state = backupState,
+            onBackUp = { createBackup.launch(vm.suggestedFileName()) },
+            onRestore = { openBackup.launch(BACKUP_MIME_TYPES) },
+            onConfirmRestore = { uri -> vm.restoreFrom(uri) },
+            onUndo = { vm.undoRestore() },
+            canUndo = canUndo,
+            onDismiss = { showBackup = false; vm.dismissBackup() }
+        )
+    }
+}
+
+// Some providers hand a synced .zip back as octet-stream, so filtering on
+// application/zip alone can hide the user's own backup from the picker.
+private val BACKUP_MIME_TYPES = arrayOf("application/zip", "application/octet-stream")
+
+@Composable
+private fun BackupDialog(
+    state: BackupState,
+    onBackUp: () -> Unit,
+    onRestore: () -> Unit,
+    onConfirmRestore: (Uri) -> Unit,
+    onUndo: () -> Unit,
+    canUndo: Boolean,
+    onDismiss: () -> Unit
+) {
+    val working = state is BackupState.Working
+    AlertDialog(
+        // Dismissing mid-write would leave a half-written zip with no way back
+        // to the progress, so the scrim and back gesture are inert while working.
+        onDismissRequest = { if (!working) onDismiss() },
+        containerColor = PanelColor,
+        title = { Text("Backup", color = TextColor) },
+        text = {
+            when (state) {
+                is BackupState.Working -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        color = PivotColor, modifier = Modifier.size(18.dp), strokeWidth = 2.dp
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(state.message, color = DimColor, fontSize = 13.sp)
+                }
+                is BackupState.Confirm -> Column {
+                    Text(state.summary, color = TextColor, fontSize = 13.sp)
+                    state.caution?.let {
+                        Spacer(Modifier.height(10.dp))
+                        Text(it, color = PivotColor, fontSize = 12.sp)
+                    }
+                }
+                is BackupState.Done -> Text(state.message, color = TextColor, fontSize = 13.sp)
+                is BackupState.Error -> Text(state.message, color = PivotColor, fontSize = 13.sp)
+                is BackupState.Idle -> Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        "One .zip holding every book — text, cover and original file — " +
+                            "plus your reading positions and speeds. You pick where it goes.",
+                        color = DimColor, fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Restoring puts your library back to that snapshot, so books that " +
+                            "aren't in it are removed. If you have read further than the " +
+                            "backup, that position is kept. You can undo straight afterwards.",
+                        color = DimColor, fontSize = 13.sp
+                    )
+                    if (canUndo) {
+                        TextButton(onClick = onUndo) {
+                            Text("Undo last restore", color = PivotColor)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when (state) {
+                is BackupState.Idle ->
+                    TextButton(onClick = onBackUp) { Text("Back up", color = PivotColor) }
+                is BackupState.Confirm ->
+                    TextButton(onClick = { onConfirmRestore(state.uri) }) {
+                        Text("Restore", color = PivotColor)
+                    }
+                is BackupState.Working -> Unit
+                else -> TextButton(onClick = onDismiss) { Text("Done", color = PivotColor) }
+            }
+        },
+        dismissButton = {
+            when (state) {
+                is BackupState.Idle ->
+                    TextButton(onClick = onRestore) { Text("Restore", color = DimColor) }
+                is BackupState.Confirm ->
+                    TextButton(onClick = onDismiss) { Text("Cancel", color = DimColor) }
+                is BackupState.Done ->
+                    if (state.canUndo) {
+                        TextButton(onClick = onUndo) { Text("Undo", color = DimColor) }
+                    }
+                else -> Unit
+            }
+        }
+    )
 }
 
 @Composable
