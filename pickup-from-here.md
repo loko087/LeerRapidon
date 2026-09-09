@@ -4,10 +4,84 @@ Notes for whichever session (on whichever machine) picks this project back
 up next. Local Claude memory doesn't travel between computers, so anything
 that should survive a machine switch belongs here instead.
 
+## Release infrastructure and the premium unlock (2026-09-08)
+
+[PR #9](https://github.com/loko087/LeerRapidon/pull/9) and
+[PR #10](https://github.com/loko087/LeerRapidon/pull/10), both **merged to
+`main`**. The app is now buildable as a shippable, signed artifact, which it
+previously was not, and has a paywall on Play.
+
+**The app is named Leer Rapidon.** The launcher icon always said so while
+`app_name` said "Rapid Reader"; user-facing text is now consistent. The
+package name `com.rapidreader.app` is deliberately unchanged — it is
+permanent once published and never shown to users — as are internal Kotlin
+symbols (`RapidReaderTheme`, `Theme.RapidReader`). Don't "fix" those.
+
+**Two product flavours, and new code has to pick a source set.**
+`app/src/play` links Play Billing and gates audio mode and the
+original-form reader behind a one-time USD 0.99 `premium_unlock`;
+`app/src/github` links no billing code at all and unlocks everything. Shared
+code lives in `app/src/main` behind a `PremiumSource` interface, and each
+flavour supplies its own `PremiumProvider`. This is a flavour rather than a
+runtime flag because Play Billing only serves apps the Play Store installed —
+a sideloaded APK cannot use it, and the GitHub build deliberately targets
+people who would rather not use the Store. Build with `assembleGithubRelease`
+/ `bundlePlayRelease`; plain `assembleRelease` no longer exists.
+
+**Gotchas worth not rediscovering:**
+- **Billing uses the non-ktx artifact on purpose.** `billing-ktx:9.1.0`
+  ships Kotlin 2.3 metadata and this project is on Kotlin 1.9.24, so KSP
+  fails outright. Nothing here uses the coroutine extensions. If Kotlin is
+  ever upgraded to 2.x (which also means moving the Compose compiler to its
+  own Gradle plugin), `-ktx` becomes available again.
+- **R8 is on for release builds.** It can only realistically break the
+  reflective paths, so a green compile proves nothing: after any dependency
+  or keep-rule change, install a signed release build and import a PDF with
+  a text layer, a scanned PDF (ML Kit OCR), and an EPUB. `app/proguard-rules.pro`
+  explains why the `com.gemalto.jp2` `-dontwarn` is not hiding a regression.
+- **targetSdk is 36 and the app is edge-to-edge.** No screen uses a
+  `Scaffold`; insets are applied once around the nav host in `MainActivity`.
+  New screens need nothing, but a screen that genuinely wants to draw under
+  the system bars has to opt out there rather than locally.
+- **Browse is slow to open on a long book.** On a 130k-word EPUB it takes
+  well over a second and sometimes several. Not measured properly and not
+  investigated — if `BrowseTextScreen` work comes up, look here first.
+
+**Store assets and copy are in the repo**: `docs/store/` (512 icon, feature
+graphic, four screenshots), `docs/privacy-policy.md`, and
+`docs/play-store-listing.md` with listing copy plus every App-content answer.
+Screenshots are all Project Gutenberg books on purpose — the books that were
+on the test device render in-copyright text in Browse and one carries an
+"Anna's Archive" suffix in its filename, which reads to a Play reviewer like
+a listing that supplies pirated books. Regenerate the feature graphic with
+`python tools/gen_feature_graphic.py`; it derives from the icon file so the
+two cannot drift.
+
+**Nothing has actually been released yet.** `RELEASING.md` is the runbook.
+Still outstanding, all of it on the Play Console side and none of it in code:
+- No upload keystore exists, so `assembleRelease` silently produces
+  **unsigned** artifacts locally. (In CI that now fails the build instead —
+  a missing secret made `base64 -d` write an empty keystore and ship
+  unsigned artifacts Play rejects hours later.)
+- The four `RELEASE_*` Actions secrets are not set.
+- GitHub Pages is not enabled, so the privacy-policy URL Play requires does
+  not resolve. Settings → Pages → `main` / `/docs`.
+- **`premium_unlock` does not exist in any Play Console.** Until it does the
+  store returns no price and the upsell correctly hides its buy button —
+  which means publishing the `play` flavour right now would ship two
+  permanently locked features with no way to buy them. Create the product
+  before publishing, or ship ungated.
+- The purchase flow has never been exercised, and cannot be from a locally
+  built APK — Play only serves billing to builds it installed. Needs an
+  internal-testing upload plus licence testers.
+- A personal developer account needs **12 testers opted into a closed test
+  for 14 continuous days** before production can even be applied for. That
+  is the long pole, measured in weeks; everything else above is hours.
+
 ## Book covers, narrow-screen fixes, and a TTS language picker (2026-08-24)
 
-On [PR #8](https://github.com/loko087/LeerRapidon/pull/8) — **open, not
-yet merged to `main`** as of this writing. Four pieces, in commit order:
+On [PR #8](https://github.com/loko087/LeerRapidon/pull/8) — **merged to
+`main`** (2026-08-24). Four pieces, in commit order:
 
 **1. Cover thumbnails.** Every imported book gets a small cover on its
 `LibraryScreen` card, tried in this order:
@@ -172,10 +246,13 @@ per-screen choices.
   that actually persists across app restarts? Font choice feels more
   like a lasting preference than a per-session toggle, unlike the
   precedents so far — worth asking rather than assuming either way.
-  There's no persistence mechanism for a cross-screen shared setting
-  yet (no SharedPreferences/DataStore in this codebase currently; `wpm`
-  persists but per-book via Room, which isn't the right shape for a
-  single UI-wide preference).
+  There's still no persistence mechanism for a cross-screen shared
+  setting in `main` (`wpm` persists but per-book via Room, which isn't
+  the right shape for a single UI-wide preference). Note the billing
+  work added a `SharedPreferences` — but only inside the **`play`
+  flavour's** `PremiumProvider`, so it is not reachable from shared code
+  and is not the mechanism to build on. See the release section at the
+  top of this file.
 - **Font type options:** a curated preset list (e.g. serif/sans/mono,
   matching `FontFamily.Serif` already used for the RSVP word display) vs.
   exposing more of the system's available fonts?
@@ -223,9 +300,10 @@ on persistence here ("let's leave that for the 'what to do next', like a
 nice to have") rather than asking for it now.
 
 **Not yet decided — needs a real design conversation before building,**
-same open question as the font-options item above (this codebase still
-has no cross-screen/cross-session preference store — no
-SharedPreferences/DataStore, just per-book Room columns):
+same open question as the font-options item above (shared code still has
+no cross-screen/cross-session preference store — just per-book Room
+columns; the one `SharedPreferences` that now exists lives in the `play`
+flavour's billing code and is not shared):
 - Global (one language for all books) or per-book (a German book and an
   Italian book each remember their own)? Per-book fits the actual
   problem better — the language is a property of the text, not a
