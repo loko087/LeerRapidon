@@ -99,6 +99,10 @@ fun ReaderScreen(
         }
         return
     }
+    if (ui.textMissing) {
+        MissingTextScreen(title = ui.title, backLabel = "← Library", onBack = onBack)
+        return
+    }
 
     val frameEnd = (ui.idx + ui.wordsPerFrame).coerceIn(ui.idx, ui.words.size)
     val frame = ui.words.subList(ui.idx, frameEnd)

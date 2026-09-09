@@ -57,6 +57,10 @@ fun BrowseTextScreen(
         }
         return
     }
+    if (ui.textMissing) {
+        MissingTextScreen(title = ui.title, backLabel = "← Back", onBack = onBack)
+        return
+    }
 
     // Land on wherever the reader currently is, not the top of the book.
     LaunchedEffect(ui.paragraphs) {

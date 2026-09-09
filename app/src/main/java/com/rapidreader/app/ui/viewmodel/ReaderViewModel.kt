@@ -8,12 +8,14 @@ import com.rapidreader.app.data.OriginalKind
 import com.rapidreader.app.data.originalKind
 import com.rapidreader.app.rsvp.RsvpEngine
 import com.rapidreader.app.tts.SpeechController
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 data class ReaderUiState(
@@ -35,7 +37,10 @@ data class ReaderUiState(
     val language: Locale = Locale.ENGLISH,
     val ttsOk: Boolean = true,
     val loading: Boolean = true,
-    val originalKind: OriginalKind? = null
+    val originalKind: OriginalKind? = null,
+    // The row is in the library but its text file isn't on disk. Reached by
+    // clearing app data, or by restoring a library onto a fresh install.
+    val textMissing: Boolean = false
 )
 
 class ReaderViewModel(app: Application) : AndroidViewModel(app) {
@@ -63,12 +68,27 @@ class ReaderViewModel(app: Application) : AndroidViewModel(app) {
         if (bookId == id && !_ui.value.loading) return
         bookId = id
         viewModelScope.launch {
-            val entry = repo.getBook(id) ?: return@launch
-            val text = repo.getBookText(id)
-            val words = RsvpEngine.tokenize(text)
-            joined = words.joinToString(" ")
-            var pos = 0
-            offs = words.map { w -> val p = pos; pos += w.length + 1; p }
+            val entry = repo.getBook(id)
+            val text = entry?.let { repo.getBookText(id) }
+            if (entry == null || text == null) {
+                // Bailing out without clearing `loading` would spin forever.
+                _ui.value = ReaderUiState(
+                    title = entry?.title.orEmpty(), loading = false, textMissing = true
+                )
+                return@launch
+            }
+            // Default, not IO: tokenizing, joining, and building the char-offset
+            // table are three CPU-bound passes over the whole book. Run inline on
+            // viewModelScope (Main.immediate) they stalled the UI thread for the
+            // whole of opening the reader on a long book.
+            val (words, joinedWords, offsets) = withContext(Dispatchers.Default) {
+                val w = RsvpEngine.tokenize(text)
+                var pos = 0
+                val o = w.map { word -> val p = pos; pos += word.length + 1; p }
+                Triple(w, w.joinToString(" "), o)
+            }
+            joined = joinedWords
+            offs = offsets
             _ui.value = ReaderUiState(
                 title = entry.title,
                 words = words,

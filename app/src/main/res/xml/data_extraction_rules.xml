@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API 31+ backup/transfer rules. See backup_rules.xml for the API 26-30 version
+  and for why the book files are kept out of cloud backup.
+
+  The split is the point of this file: cloud-backup is quota-limited, so it
+  carries only the Room database (progress and titles). device-transfer is a
+  direct device-to-device copy with no such quota, so it takes everything —
+  moving to a new phone brings the actual books across, not just the positions.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="database" path="rapid_reader.db" />
+        <include domain="database" path="rapid_reader.db-wal" />
+        <include domain="database" path="rapid_reader.db-shm" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- No <include> here: the default is everything, which is what a local
+             transfer to your own new device should carry. -->
+    </device-transfer>
+</data-extraction-rules>

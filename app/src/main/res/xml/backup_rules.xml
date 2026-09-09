@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup rules for API 26-30 (API 31+ uses data_extraction_rules.xml).
+
+  Only the Room database goes to the cloud: titles, reading positions, speed
+  and the per-book original/cover pointers. That is the part that actually
+  hurts to lose and it measures in kilobytes.
+
+  files/books (extracted text, covers, and the preserved PDF/EPUB originals) is
+  deliberately left out. Auto Backup enforces a per-app quota, and a single
+  preserved original can exceed it on its own — at which point the WHOLE backup
+  silently fails and even the progress stops being saved. Excluding the bulk is
+  what makes the small, valuable part reliable.
+
+  Naming any <include> makes everything else excluded by default, so the play
+  flavour's cached billing entitlement stays out too. That is intended: it is
+  re-queried from Play on launch and should never ride along to another account.
+
+  The -wal/-shm side files travel with the database on purpose. Room runs in WAL
+  mode, so the .db alone can be a stale snapshot with recent writes still in the
+  log; backing up the set together keeps it consistent.
+-->
+<full-backup-content>
+    <include domain="database" path="rapid_reader.db" />
+    <include domain="database" path="rapid_reader.db-wal" />
+    <include domain="database" path="rapid_reader.db-shm" />
+</full-backup-content>
