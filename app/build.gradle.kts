@@ -140,4 +140,9 @@ dependencies {
     // OCR fallback for scanned PDFs with no text layer. Bundled (not Play
     // Services-downloaded) model, so it works fully offline like the rest of the app.
     implementation("com.google.mlkit:text-recognition:16.0.1")
+
+    // JVM unit tests only — no Robolectric/instrumentation here. RsvpEngine and
+    // EpubParser.normalizePath are plain Kotlin with no Android framework calls,
+    // so a real device/emulator is never needed to test them.
+    testImplementation("junit:junit:4.13.2")
 }
