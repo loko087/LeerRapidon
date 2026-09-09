@@ -1,8 +1,11 @@
 # Leer Rapidon (Native Android)
 
 RSVP speed-reading app with a book library, PDF/EPUB import, and native
-text-to-speech, built with Kotlin + Jetpack Compose. Fully offline —
-no network permission is requested.
+text-to-speech, built with Kotlin + Jetpack Compose. Reading is entirely
+offline — your books never leave the device. The app makes exactly one
+kind of network request: an optional cover-art lookup by title against
+Open Library, and only when a cover cannot be pulled out of the file
+itself. See [docs/privacy-policy.md](docs/privacy-policy.md).
 
 ## What's implemented
 
@@ -20,6 +23,12 @@ no network permission is requested.
     (real-world EPUB markup is often not strictly valid XML, so this
     avoids brittle XML parsing failures on content documents).
   - Plain text read directly.
+- **Cover thumbnails** (`OpenLibraryCovers.kt`, `BookRepository.saveCover`)
+  — every imported book gets a cover on its library card: an EPUB's
+  declared cover image, or a rendered first page for a PDF, falling back
+  to an Open Library title search. The fallback is the app's only network
+  call, runs after the book is already saved, and never fails an import.
+  Tapping a cover opens an enlarged preview.
 - **Fast reader** (`ReaderScreen.kt` + `ReaderViewModel.kt`) — RSVP display
   with the ORP (optimal recognition point) letter highlighted, a speed
   slider, scrubber, and audio mode. A "words per frame" slider (1–5)
@@ -56,6 +65,11 @@ no network permission is requested.
   Speed slider feel unresponsive) and respects the same "words per
   frame" setting as visual mode, with the pivot tracking the exact word
   being spoken. Fast-reader only, for now.
+- **Reading-language picker** — audio mode defaults to English rather than
+  the device locale (an English book on an Italian phone used to be read
+  with Italian pronunciation) and exposes every installed TTS language in
+  the reader's audio panel, listed as autonyms. Session-scoped, not
+  persisted.
 - **Persistence** — `BookRepository` stores each book's extracted text as
   a file under internal storage and keeps title/progress/speed in a Room
   database. Reading position is saved every ~15 words and on
