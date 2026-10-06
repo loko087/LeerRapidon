@@ -145,4 +145,6 @@ dependencies {
     // EpubParser.normalizePath are plain Kotlin with no Android framework calls,
     // so a real device/emulator is never needed to test them.
     testImplementation("junit:junit:4.13.2")
+    // android.jar stubs org.json; the real one lets LibraryManifest run on the JVM.
+    testImplementation("org.json:json:20240303")
 }
