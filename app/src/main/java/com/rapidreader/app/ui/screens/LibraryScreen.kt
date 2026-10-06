@@ -2,6 +2,7 @@ package com.rapidreader.app.ui.screens
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -37,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,6 +82,14 @@ fun LibraryScreen(
     val backupState by vm.backup.collectAsState()
     val canUndo by vm.canUndo.collectAsState()
     var showBackup by remember { mutableStateOf(false) }
+    // Finished books get archived so they stop crowding the main list; this
+    // flips the list over to them. Saveable so rotation doesn't flip it back.
+    var showArchived by rememberSaveable { mutableStateOf(false) }
+    val archivedCount = books.count { it.archived }
+    // Leaving the archive view once it empties, so the user isn't stranded on
+    // an empty list with the toggle that would get them out now hidden.
+    LaunchedEffect(archivedCount) { if (archivedCount == 0) showArchived = false }
+    val shown = books.filter { it.archived == showArchived }
     // Re-checked on open: the snapshot outlives the result message, so undo
     // stays reachable after "Done" is tapped, until the next restore replaces it.
     LaunchedEffect(showBackup) { if (showBackup) vm.refreshUndo() }
@@ -101,27 +111,40 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "LEER RAPIDON",
+                if (showArchived) "ARCHIVED" else "LEER RAPIDON",
                 color = DimColor, fontSize = 13.sp, fontWeight = FontWeight.Medium
             )
-            TextButton(onClick = { showBackup = true }) { Text("Backup", color = DimColor) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (archivedCount > 0) {
+                    TextButton(onClick = { showArchived = !showArchived }) {
+                        Text(
+                            if (showArchived) "Library" else "Archived ($archivedCount)",
+                            color = DimColor
+                        )
+                    }
+                }
+                TextButton(onClick = { showBackup = true }) { Text("Backup", color = DimColor) }
+            }
         }
-        if (books.isEmpty()) {
+        if (showArchived) BackHandler { showArchived = false }
+        if (shown.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(
-                    "No books yet. Add a PDF, EPUB, or text file to get started.",
+                    if (books.isEmpty()) "No books yet. Add a PDF, EPUB, or text file to get started."
+                    else "Everything here is archived. Tap \"Archived\" to see those books.",
                     color = DimColor, fontSize = 14.sp
                 )
             }
         } else {
             LazyColumn(Modifier.weight(1f)) {
-                items(books, key = { it.id }) { book ->
+                items(shown, key = { it.id }) { book ->
                     BookCard(
                         book,
                         coverFile = vm.coverFile(book),
                         onClick = { onOpenBook(book.id) },
                         onCoverClick = { file -> expandedCover = file },
                         onOpenOriginal = { kind -> onOpenOriginal(book.id, kind) },
+                        onToggleArchive = { vm.setArchived(book.id, !book.archived) },
                         onDelete = { vm.delete(book.id) }
                     )
                     Spacer(Modifier.height(12.dp))
@@ -247,6 +270,7 @@ private fun BookCard(
     onClick: () -> Unit,
     onCoverClick: (File) -> Unit,
     onOpenOriginal: (OriginalKind) -> Unit,
+    onToggleArchive: () -> Unit,
     onDelete: () -> Unit
 ) {
     val pct = if (book.wordCount > 1) (book.idx * 100 / (book.wordCount - 1)).coerceIn(0, 100) else 0
@@ -312,6 +336,9 @@ private fun BookCard(
             book.originalKind()?.let { kind ->
                 val openOriginal = rememberPremiumAction(PremiumFeature.ORIGINAL_VIEW) { onOpenOriginal(kind) }
                 TextButton(onClick = openOriginal) { Text(premiumLabel("Original"), color = DimColor) }
+            }
+            TextButton(onClick = onToggleArchive) {
+                Text(if (book.archived) "Unarchive" else "Archive", color = DimColor)
             }
             TextButton(onClick = onDelete) { Text("\u2715", color = DimColor) }
         }

@@ -24,7 +24,10 @@ data class BookEntity(
     // Name (relative to <filesDir>/books) of the cover thumbnail: "<id>.cover".
     // Null until a cover is found — from the EPUB itself, a rendered PDF first
     // page, or (set later, asynchronously) an Open Library title search.
-    val coverPath: String? = null
+    val coverPath: String? = null,
+    // Moved off the main library list (usually because it's finished). Purely
+    // a filter: progress, files and everything else stay as they were.
+    val archived: Boolean = false
 )
 
 enum class OriginalKind { PDF, EPUB }

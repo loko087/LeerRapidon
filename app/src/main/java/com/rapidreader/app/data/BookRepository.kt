@@ -46,6 +46,8 @@ class BookRepository(context: Context) {
 
     fun observeBooks(): Flow<List<BookEntity>> = dao.getAll()
 
+    suspend fun setArchived(id: String, archived: Boolean) = dao.setArchived(id, archived)
+
     suspend fun getBook(id: String): BookEntity? = dao.getById(id)
 
     /** The book's extracted text, or null when the file behind the row is gone.

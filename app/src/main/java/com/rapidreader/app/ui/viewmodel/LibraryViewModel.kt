@@ -58,6 +58,10 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.deleteBook(id) }
     }
 
+    fun setArchived(id: String, archived: Boolean) {
+        viewModelScope.launch { repo.setArchived(id, archived) }
+    }
+
     fun coverFile(book: BookEntity): File? = repo.resolveCover(book.coverPath)
 
     private val _backup = MutableStateFlow<BackupState>(BackupState.Idle)
