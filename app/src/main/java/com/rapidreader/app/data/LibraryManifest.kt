@@ -31,6 +31,7 @@ object LibraryManifest {
                     .put("originalPath", b.originalPath)
                     .put("originalPos", b.originalPos)
                     .put("coverPath", b.coverPath)
+                    .put("archived", b.archived)
             )
         }
         return JSONObject()
@@ -61,7 +62,9 @@ object LibraryManifest {
                 updatedAt = o.optLong("updatedAt", 0L),
                 originalPath = o.stringOrNull("originalPath"),
                 originalPos = if (o.isNull("originalPos")) null else o.optInt("originalPos"),
-                coverPath = o.stringOrNull("coverPath")
+                coverPath = o.stringOrNull("coverPath"),
+                // Absent in backups made before archiving existed: unarchived.
+                archived = o.optBoolean("archived", false)
             )
         }
         return BackupManifest(root.optLong("createdAt", 0L), books)

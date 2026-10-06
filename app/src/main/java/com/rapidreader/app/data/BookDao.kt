@@ -28,6 +28,11 @@ interface BookDao {
     @Query("UPDATE books SET coverPath = :coverPath WHERE id = :id")
     suspend fun updateCover(id: String, coverPath: String?)
 
+    // Like updateCover, leaves updatedAt alone: archiving isn't reading, and
+    // unarchiving shouldn't jump the book to the top of the list.
+    @Query("UPDATE books SET archived = :archived WHERE id = :id")
+    suspend fun setArchived(id: String, archived: Boolean)
+
     @Query("DELETE FROM books WHERE id = :id")
     suspend fun delete(id: String)
 }
